@@ -205,3 +205,10 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+automated-test-cases.md
+context-document.md
+initial-briefing.md
+planning-document.md
+project-summary.md
+EMBEDDING_STRATEGY.md
+atlan_copilot/IMPROVEMENTS_README.md
