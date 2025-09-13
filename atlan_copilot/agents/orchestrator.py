@@ -63,7 +63,8 @@ class Orchestrator:
 
     async def _delay_before_response(self, state: CopilotState) -> Dict[str, Any]:
         """A simple delay node to handle API rate limiting between agent calls."""
-        delay_seconds = 60
+        # For chat interface, use minimal delay. For batch operations, use full delay.
+        delay_seconds = 1  # Reduced from 60 seconds for better UX in chat
         print(f"Orchestrator: Delaying for {delay_seconds} seconds to respect API rate limits...")
         await asyncio.sleep(delay_seconds)
         print("Orchestrator: Delay complete.")

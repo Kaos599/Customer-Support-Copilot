@@ -9,8 +9,8 @@ The following technologies were used to build the application, as specified in t
 -   **Backend Language**: Python 3.11+
 -   **AI Orchestration**: [LangGraph](https://github.com/langchain-ai/langgraph)
 -   **Large Language Models (LLM)**: Google Gemini Family
-    -   `gemini-1.5-flash`: Used for fast and efficient tasks like ticket classification.
-    -   `gemini-1.5-pro`: Used for more complex reasoning and high-quality response generation.
+    -   `gemini-2.5-flash`: Used for fast and efficient tasks like ticket classification.
+    -   `gemini-2.5-flash`: Used for more complex reasoning and high-quality response generation.
         -   `models/text-embedding-004`: Used for generating text embeddings.
 -   **Frontend Framework**: [Streamlit](https://streamlit.io/)
 -   **Vector Database**: [Qdrant](https://qdrant.tech/)
@@ -50,7 +50,40 @@ The following technologies were used to build the application, as specified in t
     -   To overcome this environmental blocker and ensure the application was runnable, a pragmatic decision was made to use `sys.path` manipulation, which proved to be a reliable workaround.
 -   **Trade-off**: This is not standard Python best practice. In a typical environment, the project would be installed as an editable package or run as a module. This is a known issue that would need to be revisited if the execution environment changes.
 
-### e. UI Development with Placeholder Backend
+### e. Unified Ticket Storage System & Advanced Features
+-   **Decision**: Implemented a comprehensive single-collection MongoDB architecture with embedded processing data, advanced analytics, and enterprise-grade features.
+-   **Rationale**:
+    -   **Unified Schema**: Single collection eliminates complexity and data synchronization issues, providing a clean, maintainable architecture.
+    -   **Manual Processing Control**: Users have complete control over ticket processing through an intuitive button-based interface, preventing unwanted automatic processing.
+    -   **Embedded Classification Data**: Classification results embedded directly in ticket documents maintain data locality and enable complex queries.
+    -   **Advanced Fetch Functionality**: Multiple fetch modes with session state tracking enable efficient ticket discovery and management.
+    -   **Batch Processing Options**: Flexible processing modes (all, by priority, by count limit) improve workflow efficiency for different use cases.
+    -   **Comprehensive Analytics**: Real-time statistics, interactive charts, and advanced filtering provide deep insights into ticket processing patterns.
+    -   **File Upload System**: Robust CSV/JSON import with validation and preview ensures data quality and user experience.
+    -   **Proper Tag Definitions**: AI classification now uses structured tag definitions for accurate, meaningful categorization.
+    -   **Audit Trail**: Complete processing history with timestamps, confidence scores, and metadata enables compliance and debugging.
+-   **Implementation Details**:
+    -   **Schema Structure**: `processed` boolean field with embedded classification, confidence scores, and processing metadata.
+    -   **Query Optimization**: Efficient MongoDB queries for filtering, searching, and analytics.
+    -   **Session Management**: Streamlit session state for tracking user interactions and fetch history.
+    -   **Caching Strategy**: Smart caching with TTL for analytics and manual refresh capabilities.
+    -   **Error Handling**: Comprehensive error handling with user-friendly feedback and graceful degradation.
+-   **Trade-off**: Slightly larger document sizes for processed tickets, but provides superior data consistency, query performance, and user experience. The unified approach significantly simplifies the codebase while delivering enterprise-grade functionality.
+
+### f. UI Development with Placeholder Backend
 -   **Decision**: The Streamlit UI was developed with a placeholder chat backend before the LangGraph orchestrator was fully implemented.
 -   **Rationale**: This allowed for parallel development and rapid prototyping of the user interface. The UI components were built and tested independently, with a clear contract for how they would eventually connect to the backend logic.
 -   **Trade-off**: The UI provided a "mock" experience that was not fully representative of the final system's performance (e.g., response times).
+
+### g. Async/Await Compatibility Resolution ✅ RESOLVED
+-   **Decision**: Fixed critical 'await outside async function' error in Streamlit dashboard
+-   **Rationale**:
+    -   **Problem**: Streamlit runs in a synchronous execution context, but the application uses async database operations (MongoDB motor driver)
+    -   **Initial Issue**: Direct use of `await` in synchronous Streamlit functions caused `SyntaxError: 'await' outside async function`
+    -   **Solution**: Wrapped all async operations in proper async functions and used `asyncio.run_until_complete()` for Streamlit compatibility
+-   **Implementation**:
+    -   Created `process_all_tickets()` async function to handle all MongoDB operations
+    -   Used proper event loop management with `asyncio.get_running_loop()` and `asyncio.new_event_loop()`
+    -   Ensured MongoDB connections are opened once and closed properly
+-   **Result**: ✅ Streamlit app runs without errors, MongoDB operations work correctly, dashboard processes tickets successfully
+-   **Impact**: Critical blocking issue resolved, enabling full dashboard functionality

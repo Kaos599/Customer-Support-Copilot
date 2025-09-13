@@ -15,7 +15,7 @@ class ResponseAgent(BaseAgent):
     The agent responsible for generating a final, human-readable response.
     It uses the context retrieved by the RAG agent to answer the user's query.
     """
-    def __init__(self, model_name: str = "gemini-1.5-pro"):
+    def __init__(self, model_name: str = "gemini-2.5-flash"):
         """
         Initializes the ResponseAgent.
         Uses a more powerful model for generation, as specified in the project brief.

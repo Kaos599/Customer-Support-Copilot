@@ -47,7 +47,7 @@ async def check_qdrant():
 
 async def check_gemini_flash():
     """Checks the connection to the Gemini Flash API."""
-    print("Checking Gemini Flash (gemini-1.5-flash) API...")
+    print("Checking Gemini Flash (gemini-2.5-flash) API...")
     try:
         agent = ClassificationAgent()
         # A simple, non-empty input to test the API
@@ -62,7 +62,7 @@ async def check_gemini_flash():
 
 async def check_gemini_pro():
     """Checks the connection to the Gemini Pro API."""
-    print("Checking Gemini Pro (gemini-1.5-pro) API...")
+    print("Checking Gemini Pro (gemini-2.5-flash) API...")
     try:
         agent = ResponseAgent()
         # A simple, non-empty input to test the API
