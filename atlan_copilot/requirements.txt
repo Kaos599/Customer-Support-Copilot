@@ -1,0 +1,13 @@
+streamlit
+langgraph
+google-generativeai
+qdrant-client
+pymongo
+beautifulsoup4
+requests
+python-dotenv
+motor
+pandas
+scikit-learn
+langchain
+langchain-community

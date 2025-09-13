@@ -1,0 +1,84 @@
+{
+  "topic_tags": {
+    "category": "TopicClassification",
+    "description": "Represents the main topic or subject area of the customer's inquiry, helping route to appropriate knowledge sources and specialists.",
+    "tags": [
+      {
+        "name": "How-to",
+        "description": "Questions seeking step-by-step guidance or instructions on how to perform specific tasks, configure features, or use Atlan functionalities."
+      },
+      {
+        "name": "Product",
+        "description": "General product-related inquiries about Atlan's features, capabilities, pricing, or overall functionality that don't fall into specific technical categories."
+      },
+      {
+        "name": "Connector",
+        "description": "Questions related to Atlan's data connectors, including setup, configuration, troubleshooting, or compatibility with external data sources."
+      },
+      {
+        "name": "Lineage",
+        "description": "Inquiries about data lineage features, tracking data flow, understanding data dependencies, or configuring lineage visualization in Atlan."
+      },
+      {
+        "name": "API/SDK",
+        "description": "Technical questions about Atlan's API endpoints, SDK usage, integration development, authentication, or programmatic access to Atlan services."
+      },
+      {
+        "name": "SSO",
+        "description": "Single Sign-On related queries including configuration, authentication issues, identity provider setup, or access management."
+      },
+      {
+        "name": "Glossary",
+        "description": "Questions about Atlan's business glossary features, term management, metadata definitions, or data dictionary functionality."
+      },
+      {
+        "name": "Best practices",
+        "description": "Requests for recommended approaches, optimization strategies, governance guidelines, or industry best practices for using Atlan effectively."
+      },
+      {
+        "name": "Sensitive data",
+        "description": "Inquiries related to data privacy, PII handling, data classification, security measures, or compliance requirements within Atlan."
+      }
+    ]
+  },
+  "sentiment": {
+    "category": "CustomerSentiment",
+    "description": "Captures the emotional tone and urgency level of the customer's communication to help prioritize responses and tailor support approach.",
+    "tags": [
+      {
+        "name": "Frustrated",
+        "description": "Customer expresses frustration, disappointment, or dissatisfaction with current experience, often indicating urgent attention needed."
+      },
+      {
+        "name": "Curious",
+        "description": "Customer shows positive engagement and genuine interest in learning more about features or capabilities, representing growth opportunities."
+      },
+      {
+        "name": "Angry",
+        "description": "Customer displays strong negative emotions, complaints, or demands immediate resolution, requiring escalation and careful handling."
+      },
+      {
+        "name": "Neutral",
+        "description": "Customer maintains a professional, matter-of-fact tone without strong emotional indicators, representing standard support interactions."
+      }
+    ]
+  },
+  "priority": {
+    "category": "SupportPriority",
+    "description": "Determines the urgency level and response timeline for customer tickets based on business impact and severity.",
+    "tags": [
+      {
+        "name": "P0 (High)",
+        "description": "Critical issues requiring immediate attention: system outages, data loss, security breaches, or blocking issues affecting business operations."
+      },
+      {
+        "name": "P1 (Medium)",
+        "description": "Important issues that impact productivity but have workarounds: feature malfunctions, performance issues, or configuration problems."
+      },
+      {
+        "name": "P2 (Low)",
+        "description": "Non-urgent requests that can be addressed within standard timelines: feature requests, general questions, or minor enhancements."
+      }
+    ]
+  }
+}
