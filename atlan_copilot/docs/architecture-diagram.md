@@ -67,6 +67,17 @@ graph TD
     A -- Requests Data --> M
     M -- Provides Tickets --> A
     A -- Classifies via --> C
+    C -- Stores Processed Tickets --> P[Processed Tickets Collection]
+
+    %% Data Flow for Chat Interface
+    B -- User Query --> C
+    C -- Classifies & Retrieves --> D
+    C -- Stores Processed Tickets --> P
+
+    subgraph "MongoDB Collections"
+        Q[Raw Tickets Collection]
+        P[Processed Tickets Collection]
+    end
 
     style A fill:#268bd2,stroke:#333,stroke-width:2px
     style B fill:#268bd2,stroke:#333,stroke-width:2px
@@ -78,6 +89,8 @@ graph TD
     style L fill:#6c71c4,stroke:#333,stroke-width:2px
     style M fill:#b58900,stroke:#333,stroke-width:2px
     style N fill:#b58900,stroke:#333,stroke-width:2px
+    style P fill:#dc3545,stroke:#333,stroke-width:2px
+    style Q fill:#28a745,stroke:#333,stroke-width:2px
 ```
 
 ## How to Read the Diagram
@@ -86,5 +99,25 @@ graph TD
 -   **Pink Box**: Represents the central LangGraph orchestrator that manages the workflow.
 -   **Green Boxes**: Represent the individual AI agents that perform specific tasks.
 -   **Orange Boxes**: Represent the components of the data ingestion pipeline used to build the knowledge base.
--   **Purple/Yellow Boxes**: Represent the external services and databases that the system depends on.
+-   **Purple Box**: Represents the Google Gemini API for AI model interactions.
+-   **Yellow Boxes**: Represent the MongoDB and Qdrant databases that store data and embeddings.
+-   **Red Box**: Represents the Processed Tickets Collection for storing classified tickets.
+-   **Green Box (MongoDB)**: Represents the Raw Tickets Collection for unprocessed tickets.
 -   **Arrows**: Indicate the flow of data or control between the different components.
+
+## Data Flow Summary
+
+### Ticket Processing Flow
+1. **Raw tickets** are loaded from MongoDB Raw Tickets Collection
+2. **Classification Agent** processes tickets using Gemini API
+3. **Results** are stored in MongoDB Processed Tickets Collection
+4. **Dashboard** displays processed tickets with analytics
+5. **Chat interface** uses processed ticket data for enhanced responses
+
+### RAG Query Flow
+1. **User query** enters through Chat Interface
+2. **Orchestrator** manages multi-agent workflow
+3. **Classification Agent** analyzes query intent
+4. **RAG Agent** searches Qdrant vector database
+5. **Response Agent** generates final answer with citations
+6. **Processed results** are stored in MongoDB for future reference

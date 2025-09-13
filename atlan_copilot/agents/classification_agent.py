@@ -17,7 +17,7 @@ class ClassificationAgent(BaseAgent):
     An agent responsible for classifying customer support tickets using the Gemini API.
     """
 
-    def __init__(self, model_name: str = "gemini-1.5-flash"):
+    def __init__(self, model_name: str = "gemini-2.5-flash"):
         """
         Initializes the ClassificationAgent.
         The API key is configured here, ensuring that dotenv has been loaded by the caller.
@@ -51,7 +51,7 @@ class ClassificationAgent(BaseAgent):
             print(f"Error initializing Gemini model '{model_name}': {e}")
             return None
 
-    def _load_tag_definitions(self) -> Dict[str, List[str]]:
+    def _load_tag_definitions(self) -> Dict[str, Dict[str, Any]]:
         """Loads the classification tag definitions from the JSON file."""
         try:
             path = os.path.join(project_root, 'config', 'tag_definitions.json')
@@ -69,9 +69,18 @@ class ClassificationAgent(BaseAgent):
         if not self.tag_definitions:
             return ""
 
-        topic_tags_str = ", ".join(self.tag_definitions.get('topic_tags', []))
-        sentiment_tags_str = ", ".join(self.tag_definitions.get('sentiment', []))
-        priority_tags_str = ", ".join(self.tag_definitions.get('priority', []))
+        # Extract tag names from the nested structure
+        topic_tags = [tag["name"] for tag in self.tag_definitions.get('topic_tags', {}).get('tags', [])]
+        sentiment_tags = [tag["name"] for tag in self.tag_definitions.get('sentiment', {}).get('tags', [])]
+        priority_tags = [tag["name"] for tag in self.tag_definitions.get('priority', {}).get('tags', [])]
+
+        topic_tags_str = ", ".join(f'"{tag}"' for tag in topic_tags)
+        sentiment_tags_str = ", ".join(f'"{tag}"' for tag in sentiment_tags)
+        priority_tags_str = ", ".join(f'"{tag}"' for tag in priority_tags)
+
+        topic_desc = self._format_tags_with_descriptions('topic_tags')
+        sentiment_desc = self._format_tags_with_descriptions('sentiment')
+        priority_desc = self._format_tags_with_descriptions('priority')
 
         return f"""
         You are an expert AI assistant for Atlan, a data catalog company. Your task is to analyze and classify a customer support ticket based on its subject and body.
@@ -92,14 +101,72 @@ class ClassificationAgent(BaseAgent):
 
         **Classification Categories and Valid Tags:**
 
-        *   **topic_tags** (Select one or more from this list):
-            `{topic_tags_str}`
+        *   **topic_tags** (Select one or more from this list, based on the ticket's main subject):
+            {topic_desc}
 
-        *   **sentiment** (Select ONLY one from this list):
-            `{sentiment_tags_str}`
+        *   **sentiment** (Select ONLY one from this list, based on the customer's emotional tone):
+            {sentiment_desc}
 
         *   **priority** (Select ONLY one from this list based on urgency, user frustration, and business impact):
-            `{priority_tags_str}`
+            {priority_desc}
+
+        **Required JSON Output Format:**
+        {{
+          "classification": {{
+            "topic_tags": ["<list of one or more chosen topic tags>"],
+            "sentiment": "<the single chosen sentiment tag>",
+            "priority": "<the single chosen priority tag>",
+            "confidence_scores": {{
+              "topic": <float>,
+              "sentiment": <float>,
+              "priority": <float>
+            }}
+          }}
+        }}
+        """
+
+    def _format_tags_with_descriptions(self, category: str) -> str:
+        """Formats tags with their descriptions for the prompt."""
+        if not self.tag_definitions or category not in self.tag_definitions:
+            return "No tags available"
+
+        tags = self.tag_definitions[category].get('tags', [])
+        formatted_tags = []
+
+        for tag in tags:
+            name = tag.get('name', '')
+            description = tag.get('description', '')
+            formatted_tags.append(f'- "{name}": {description}')
+
+        return '\n            '.join(formatted_tags)
+
+        return f"""
+        You are an expert AI assistant for Atlan, a data catalog company. Your task is to analyze and classify a customer support ticket based on its subject and body.
+
+        **Instructions:**
+        1.  Read the ticket content carefully to understand the user's issue.
+        2.  Classify the ticket into three distinct categories: Topic, Sentiment, and Priority.
+        3.  For each category, you MUST strictly choose from the provided list of valid tags.
+        4.  Provide a confidence score (a float between 0.0 and 1.0) for each of the three classification categories.
+        5.  Your final output MUST be a single, valid JSON object. Do not include any explanatory text, markdown formatting, or anything outside of the JSON structure.
+
+        **Ticket Subject:** "{ticket_subject}"
+
+        **Ticket Body:**
+        ---
+        {ticket_body}
+        ---
+
+        **Classification Categories and Valid Tags:**
+
+        *   **topic_tags** (Select one or more from this list, based on the ticket's main subject):
+            {self._format_tags_with_descriptions('topic_tags')}
+
+        *   **sentiment** (Select ONLY one from this list, based on the customer's emotional tone):
+            {self._format_tags_with_descriptions('sentiment')}
+
+        *   **priority** (Select ONLY one from this list based on urgency, user frustration, and business impact):
+            {self._format_tags_with_descriptions('priority')}
 
         **Required JSON Output Format:**
         {{

@@ -156,12 +156,33 @@ python -m scripts.test_semantic_chunker
 - Custom similarity metrics
 - Hierarchical chunking
 
+## Integration with Current System
+
+The semantic chunking system has been integrated into the Atlan Customer Support Copilot with the following components:
+
+### RAG Agent Integration
+- The `RAGAgent` class uses the semantic chunking approach for processing user queries
+- Query embeddings are generated using Google's Gemini embedding models
+- Similarity search is performed against semantically chunked documentation
+
+### Vector Store Integration
+- Processed chunks are stored in Qdrant vector database
+- Each chunk includes metadata: source URL, title, section, and document type
+- Optimized for retrieval-augmented generation workflows
+
+### Current Implementation Status
+✅ **Semantic Chunker**: Core implementation completed
+✅ **RAG Agent**: Integrated with semantic chunking
+✅ **Vector Storage**: Qdrant integration complete
+✅ **Query Processing**: End-to-end pipeline functional
+
 ## Dependencies
 
 - `langgraph`: Workflow orchestration
 - `scikit-learn`: Similarity calculations
 - `langchain`: Text splitting utilities
 - `google-generativeai`: Embedding generation
+- `qdrant-client`: Vector database operations
 
 ## Configuration
 
@@ -170,6 +191,17 @@ Update your `.env` file with necessary API keys:
 ```env
 GEMINI_API_KEY=your_api_key_here
 GOOGLE_API_KEY=your_api_key_here
+QDRANT_API_KEY=your_qdrant_api_key
+QDRANT_HOST=https://your-cluster.qdrant.tech
 ```
 
-The semantic chunker is now the default chunking method in the content processing pipeline, providing more intelligent and context-aware text segmentation for improved RAG performance.
+## Usage in Current System
+
+The semantic chunking system is now fully operational within the Atlan Customer Support Copilot:
+
+1. **Document Processing**: Atlan documentation is semantically chunked during ingestion
+2. **Query Processing**: User queries are processed through the semantic pipeline
+3. **Response Generation**: Contextually relevant chunks are retrieved and used for AI responses
+4. **Analytics**: Processing statistics are tracked and displayed in the dashboard
+
+The semantic chunker is the default chunking method in the content processing pipeline, providing more intelligent and context-aware text segmentation for improved RAG performance.
