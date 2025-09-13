@@ -192,9 +192,122 @@ def display_statistics():
 
 
 @st.cache_data(show_spinner=False, ttl=300)  # Cache for 5 minutes
+def display_overall_analytics_data():
+    """
+    Displays comprehensive analytics data for all tickets in the system.
+    This function is cached and contains no UI widgets.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    mongo_client = MongoDBClient()
+
+    async def get_analytics_data():
+        await mongo_client.connect()
+
+        # Get all tickets for analysis
+        all_tickets = await mongo_client.get_all_tickets()
+
+        # Get processing statistics
+        stats = await mongo_client.get_processing_stats()
+
+        await mongo_client.close()
+        return all_tickets, stats
+
+    all_tickets, stats = loop.run_until_complete(get_analytics_data())
+
+    if all_tickets and stats:
+        # Create analytics DataFrame
+        analytics_data = []
+        for ticket in all_tickets:
+            analytics_data.append({
+                "id": ticket.get("id", ""),
+                "processed": ticket.get("processed", False),
+                "priority": ticket.get("classification", {}).get("priority", "N/A") if ticket.get("processed") else "Unprocessed",
+                "sentiment": ticket.get("classification", {}).get("sentiment", "N/A") if ticket.get("processed") else "Unprocessed",
+                "topic_tags": ticket.get("classification", {}).get("topic_tags", []) if ticket.get("processed") else [],
+                "created_at": ticket.get("created_at")
+            })
+
+        df_analytics = pd.DataFrame(analytics_data)
+
+        # Calculate metrics
+        total_tickets = stats.get("total_tickets", 0)
+        processed_count = stats.get("total_processed", 0)
+        processed_pct = (processed_count / total_tickets * 100) if total_tickets > 0 else 0
+        unprocessed_count = stats.get("total_unprocessed", 0)
+        unprocessed_pct = (unprocessed_count / total_tickets * 100) if total_tickets > 0 else 0
+        processed_today = stats.get("processed_today", 0)
+
+        # Priority Distribution (only for processed tickets)
+        priority_data = None
+        if processed_count > 0:
+            processed_df = df_analytics[df_analytics["processed"] == True]
+            priority_counts = processed_df["priority"].value_counts()
+            if not priority_counts.empty:
+                priority_data = pd.DataFrame({
+                    "Priority": priority_counts.index,
+                    "Count": priority_counts.values
+                })
+
+        # Sentiment Distribution (only for processed tickets)
+        sentiment_data = None
+        if processed_count > 0:
+            processed_df = df_analytics[df_analytics["processed"] == True]
+            sentiment_counts = processed_df["sentiment"].value_counts()
+            if not sentiment_counts.empty:
+                sentiment_data = pd.DataFrame({
+                    "Sentiment": sentiment_counts.index,
+                    "Count": sentiment_counts.values
+                })
+
+        # Topic Analysis (only for processed tickets)
+        topic_data = None
+        if processed_count > 0:
+            processed_df = df_analytics[df_analytics["processed"] == True]
+            # Flatten topic tags
+            all_topics = []
+            for tags in processed_df["topic_tags"]:
+                if isinstance(tags, list):
+                    all_topics.extend(tags)
+
+            if all_topics:
+                topic_counts = pd.Series(all_topics).value_counts().head(10)  # Top 10 topics
+                topic_data = pd.DataFrame({
+                    "Topic": topic_counts.index,
+                    "Count": topic_counts.values
+                })
+
+        # Time-based analysis
+        df_analytics["created_at"] = pd.to_datetime(df_analytics["created_at"], errors='coerce')
+        daily_counts = df_analytics.groupby(df_analytics["created_at"].dt.date).size()
+        time_data = daily_counts if not daily_counts.empty else None
+
+        return {
+            "stats": stats,
+            "total_tickets": total_tickets,
+            "processed_count": processed_count,
+            "processed_pct": processed_pct,
+            "unprocessed_count": unprocessed_count,
+            "unprocessed_pct": unprocessed_pct,
+            "processed_today": processed_today,
+            "priority_data": priority_data,
+            "sentiment_data": sentiment_data,
+            "topic_data": topic_data,
+            "time_data": time_data,
+            "daily_counts": daily_counts if not daily_counts.empty else None
+        }
+
+    return None
+
+
 def display_overall_analytics():
     """
     Displays comprehensive analytics for all tickets in the system.
+    This function contains UI widgets and calls the cached data function.
     """
     st.markdown("---")
 
@@ -207,47 +320,26 @@ def display_overall_analytics():
     with col2:
         if st.button("🔄 Refresh Analytics", key="refresh_analytics"):
             # Clear the cache to force refresh
-            display_overall_analytics.clear()
+            display_overall_analytics_data.clear()
             st.rerun()
 
     # Make analytics expandable to save space
     with st.expander("📈 View Detailed Analytics", expanded=True):
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+        analytics_data = display_overall_analytics_data()
 
-        mongo_client = MongoDBClient()
-
-        async def get_analytics_data():
-            await mongo_client.connect()
-
-            # Get all tickets for analysis
-            all_tickets = await mongo_client.get_all_tickets()
-
-            # Get processing statistics
-            stats = await mongo_client.get_processing_stats()
-
-            await mongo_client.close()
-            return all_tickets, stats
-
-        all_tickets, stats = loop.run_until_complete(get_analytics_data())
-
-        if all_tickets and stats:
-            # Create analytics DataFrame
-            analytics_data = []
-            for ticket in all_tickets:
-                analytics_data.append({
-                    "id": ticket.get("id", ""),
-                    "processed": ticket.get("processed", False),
-                    "priority": ticket.get("classification", {}).get("priority", "N/A") if ticket.get("processed") else "Unprocessed",
-                    "sentiment": ticket.get("classification", {}).get("sentiment", "N/A") if ticket.get("processed") else "Unprocessed",
-                    "topic_tags": ticket.get("classification", {}).get("topic_tags", []) if ticket.get("processed") else [],
-                    "created_at": ticket.get("created_at")
-                })
-
-            df_analytics = pd.DataFrame(analytics_data)
+        if analytics_data:
+            stats = analytics_data["stats"]
+            total_tickets = analytics_data["total_tickets"]
+            processed_count = analytics_data["processed_count"]
+            processed_pct = analytics_data["processed_pct"]
+            unprocessed_count = analytics_data["unprocessed_count"]
+            unprocessed_pct = analytics_data["unprocessed_pct"]
+            processed_today = analytics_data["processed_today"]
+            priority_data = analytics_data["priority_data"]
+            sentiment_data = analytics_data["sentiment_data"]
+            topic_data = analytics_data["topic_data"]
+            time_data = analytics_data["time_data"]
+            daily_counts = analytics_data["daily_counts"]
 
             # Overall metrics in a nice layout
             st.subheader("📈 Key Metrics")
@@ -256,31 +348,19 @@ def display_overall_analytics():
             col1, col2, col3, col4 = st.columns(4)
 
             with col1:
-                total_tickets = stats.get("total_tickets", 0)
                 st.metric("Total Tickets", total_tickets)
 
             with col2:
-                processed_count = stats.get("total_processed", 0)
-                processed_pct = (processed_count / total_tickets * 100) if total_tickets > 0 else 0
                 st.metric("Processed", f"{processed_count} ({processed_pct:.1f}%)")
 
             with col3:
-                unprocessed_count = stats.get("total_unprocessed", 0)
-                unprocessed_pct = (unprocessed_count / total_tickets * 100) if total_tickets > 0 else 0
                 st.metric("Unprocessed", f"{unprocessed_count} ({unprocessed_pct:.1f}%)")
 
             with col4:
-                processed_today = stats.get("processed_today", 0)
                 st.metric("Processed Today", processed_today)
 
             # Row 2: Processing status visualization
             st.subheader("🔄 Processing Status")
-
-            # Create a simple pie chart data
-            status_data = pd.DataFrame({
-                "Status": ["Processed", "Unprocessed"],
-                "Count": [processed_count, unprocessed_count]
-            })
 
             # Display as columns with progress bars
             col1, col2 = st.columns(2)
@@ -296,82 +376,45 @@ def display_overall_analytics():
                 st.write(f"{unprocessed_count} tickets")
 
             # Priority Distribution (only for processed tickets)
-            if processed_count > 0:
+            if processed_count > 0 and priority_data is not None:
                 st.subheader("🎯 Priority Distribution")
 
-                processed_df = df_analytics[df_analytics["processed"] == True]
-                priority_counts = processed_df["priority"].value_counts()
+                # Create a bar chart
+                st.bar_chart(priority_data.set_index("Priority"), color="#0068C9")
 
-                if not priority_counts.empty:
-                    # Create a bar chart
-                    st.bar_chart(priority_counts, color="#0068C9")
-
-                    # Show as table too
-                    priority_df = pd.DataFrame({
-                        "Priority": priority_counts.index,
-                        "Count": priority_counts.values
-                    })
-                    st.dataframe(priority_df, hide_index=True, use_container_width=True)
+                # Show as table too
+                st.dataframe(priority_data, hide_index=True, use_container_width=True)
 
             # Sentiment Distribution (only for processed tickets)
-            if processed_count > 0:
+            if processed_count > 0 and sentiment_data is not None:
                 st.subheader("😊 Sentiment Analysis")
 
-                processed_df = df_analytics[df_analytics["processed"] == True]
-                sentiment_counts = processed_df["sentiment"].value_counts()
+                # Create a bar chart
+                st.bar_chart(sentiment_data.set_index("Sentiment"), color="#FF4B4B")
 
-                if not sentiment_counts.empty:
-                    # Create a bar chart
-                    st.bar_chart(sentiment_counts, color="#FF4B4B")
-
-                    # Show as table
-                    sentiment_df = pd.DataFrame({
-                        "Sentiment": sentiment_counts.index,
-                        "Count": sentiment_counts.values
-                    })
-                    st.dataframe(sentiment_df, hide_index=True, use_container_width=True)
+                # Show as table
+                st.dataframe(sentiment_data, hide_index=True, use_container_width=True)
 
             # Topic Analysis (only for processed tickets)
-            if processed_count > 0:
+            if processed_count > 0 and topic_data is not None:
                 st.subheader("🏷️ Top Topics")
 
-                processed_df = df_analytics[df_analytics["processed"] == True]
+                # Create horizontal bar chart for topics
+                st.bar_chart(topic_data.set_index("Topic"), horizontal=True, color="#859900")
 
-                # Flatten topic tags
-                all_topics = []
-                for tags in processed_df["topic_tags"]:
-                    if isinstance(tags, list):
-                        all_topics.extend(tags)
-
-                if all_topics:
-                    topic_counts = pd.Series(all_topics).value_counts().head(10)  # Top 10 topics
-
-                    # Create horizontal bar chart for topics
-                    st.bar_chart(topic_counts, horizontal=True, color="#859900")
-
-                    # Show as table
-                    topic_df = pd.DataFrame({
-                        "Topic": topic_counts.index,
-                        "Count": topic_counts.values
-                    })
-                    st.dataframe(topic_df, hide_index=True, use_container_width=True)
+                # Show as table
+                st.dataframe(topic_data, hide_index=True, use_container_width=True)
 
             # Time-based analysis
-            st.subheader("📅 Ticket Creation Trends")
+            if time_data is not None:
+                st.subheader("📅 Ticket Creation Trends")
 
-            # Convert created_at to datetime if it's not already
-            df_analytics["created_at"] = pd.to_datetime(df_analytics["created_at"], errors='coerce')
-
-            # Group by date
-            daily_counts = df_analytics.groupby(df_analytics["created_at"].dt.date).size()
-
-            if not daily_counts.empty:
                 # Create a line chart for daily ticket creation
-                st.line_chart(daily_counts, color="#DC3545")
+                st.line_chart(time_data, color="#DC3545")
 
                 # Show recent activity
                 st.markdown("**Recent Activity (Last 7 days)**")
-                last_week = daily_counts.tail(7)
+                last_week = time_data.tail(7)
                 if not last_week.empty:
                     recent_df = pd.DataFrame({
                         "Date": last_week.index,
@@ -1041,24 +1084,6 @@ def display_dashboard():
                 df = df[mask]
 
             st.dataframe(df, height=400)
-
-            # Show analytics for processed tickets if any exist
-            processed_df = df[df["Status"] == "Processed"]
-            if not processed_df.empty:
-                st.markdown("---")
-                st.subheader("Processed Tickets Analytics")
-
-                col1, col2 = st.columns(2)
-
-                with col1:
-                    st.markdown("##### Priority Distribution")
-                    priority_counts = processed_df['Priority'].value_counts()
-                    st.bar_chart(priority_counts, color="#0068C9")
-
-                with col2:
-                    st.markdown("##### Sentiment Distribution")
-                    sentiment_counts = processed_df['Sentiment'].value_counts()
-                    st.bar_chart(sentiment_counts, color="#FF4B4B")
         else:
             st.info("No tickets found in the database. Use the 'Add Tickets' button to upload tickets.")
 
