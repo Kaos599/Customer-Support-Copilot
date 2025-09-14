@@ -16,7 +16,7 @@ class SimilaritySearch:
     """
     def __init__(self):
         """
-        Initializes the similarity search client.
+        Initializes the similarity search client with improved connection management.
         """
         self.qdrant_client = QdrantDBClient()
 
@@ -44,6 +44,3 @@ class SimilaritySearch:
             # This can happen if the collection doesn't exist or there's a connection issue.
             print(f"An error occurred during similarity search in '{collection_name}': {e}")
             return []
-        finally:
-            # Ensure the client connection is closed
-            await self.qdrant_client.close()
