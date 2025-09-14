@@ -2,7 +2,7 @@ import os
 import time
 import asyncio
 from typing import List, Optional
-import google.genai as genai
+from google import genai
 
 from google.genai import errors as genai_errors
 
@@ -29,13 +29,14 @@ class GeminiEmbedder:
     def _configure_api(self):
         """Configures the Gemini API key from environment variables."""
         try:
-            api_key = os.getenv("GOOGLE_API_KEY")
+            api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
             if not api_key:
-                raise ValueError("GOOGLE_API_KEY not found in environment variables.")
-            genai.configure(api_key=api_key)
-            print("Gemini API configured successfully for embeddings.")
+                raise ValueError("GOOGLE_API_KEY or GEMINI_API_KEY not found in environment variables.")
+            self.api_key = api_key
+            self.client = genai.Client(api_key=self.api_key)
+            print("Gemini client configured successfully for embeddings.")
         except Exception as e:
-            print(f"Warning: Could not configure Gemini API for embeddings: {e}")
+            print(f"Warning: Could not configure Gemini client for embeddings: {e}")
             raise
 
     def _wait_for_rate_limit(self):
@@ -98,17 +99,19 @@ class GeminiEmbedder:
                 # Record this request time
                 self.request_times.append(time.time())
 
-                # The embed_content function can handle a list of texts,
+                # The embed_content method can handle a list of texts,
                 # which is more efficient than sending one request per text.
-                result = genai.embed_content(
+                result = self.client.models.embed_content(
                     model=self.model_name,
-                    content=texts,
-                    task_type="QUESTION_ANSWERING"  # Optimized for question-answering system
+                    contents=texts,
+                    config=genai.types.EmbedContentConfig(
+                        task_type="QUESTION_ANSWERING"  # Optimized for question-answering system
+                    )
                 )
 
-                if result and 'embedding' in result:
+                if result and hasattr(result, 'embeddings'):
                     print(f"Embedding generation successful for {len(texts)} texts.")
-                    return result['embedding']
+                    return result.embeddings
                 else:
                     print(f"Warning: Unexpected response format from embedding API: {result}")
                     return []

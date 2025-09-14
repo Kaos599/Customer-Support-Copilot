@@ -1,6 +1,6 @@
 import os
 import json
-import google.genai as genai
+from google import genai
 
 from typing import Dict, Any, List
 
@@ -31,25 +31,25 @@ class ClassificationAgent(BaseAgent):
     def _configure_api(self):
         """Configures the Gemini API key from environment variables."""
         try:
-            api_key = os.getenv("GOOGLE_API_KEY")
+            api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
             if not api_key:
-                raise ValueError("GOOGLE_API_KEY not found in environment variables.")
-            genai.configure(api_key=api_key)
-            print("Gemini API configured successfully.")
+                raise ValueError("GOOGLE_API_KEY or GEMINI_API_KEY not found in environment variables.")
+            self.api_key = api_key
+            print("Gemini API key configured successfully.")
         except Exception as e:
             # This is not fatal, the model initialization will fail later.
             print(f"Warning: Could not configure Gemini API: {e}")
 
     def _initialize_model(self, model_name: str):
-        """Initializes the GenerativeModel, returns None on failure."""
+        """Initializes the GenAI client, returns None on failure."""
         try:
-            # The _configure_api method is called before this.
-            # If it fails, the constructor for GenerativeModel will raise an exception.
-            model = genai.GenerativeModel(model_name)
-            print(f"Gemini model '{model_name}' initialized successfully.")
-            return model
+            # Create client with API key
+            self.client = genai.Client(api_key=self.api_key)
+            self.model_name = model_name
+            print(f"Gemini client initialized successfully for model '{model_name}'.")
+            return self.client
         except Exception as e:
-            print(f"Error initializing Gemini model '{model_name}': {e}")
+            print(f"Error initializing Gemini client for model '{model_name}': {e}")
             return None
 
     def _load_tag_definitions(self) -> Dict[str, Dict[str, Any]]:
@@ -212,9 +212,10 @@ class ClassificationAgent(BaseAgent):
             return state
 
         try:
-            response = await self.model.generate_content_async(
-                prompt,
-                generation_config=genai.types.GenerationConfig(
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt,
+                config=genai.types.GenerateContentConfig(
                     response_mime_type="application/json"
                 )
             )

@@ -1,7 +1,7 @@
 import os
 import sys
 from typing import Dict, Any
-import google.genai as genai
+from google import genai
 
 
 # Add the project root to the Python path
@@ -28,22 +28,24 @@ class ResponseAgent(BaseAgent):
     def _configure_api(self):
         """Configures the Gemini API key from environment variables."""
         try:
-            api_key = os.getenv("GOOGLE_API_KEY")
+            api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
             if not api_key:
-                raise ValueError("GOOGLE_API_KEY not found in environment variables.")
-            genai.configure(api_key=api_key)
-            print("Gemini API configured successfully for ResponseAgent.")
+                raise ValueError("GOOGLE_API_KEY or GEMINI_API_KEY not found in environment variables.")
+            self.api_key = api_key
+            print("Gemini API key configured successfully for ResponseAgent.")
         except Exception as e:
             print(f"Warning: Could not configure Gemini API for ResponseAgent: {e}")
 
     def _initialize_model(self, model_name: str):
-        """Initializes the GenerativeModel, returns None on failure."""
+        """Initializes the GenAI client, returns None on failure."""
         try:
-            model = genai.GenerativeModel(model_name)
-            print(f"Gemini model '{model_name}' initialized successfully for ResponseAgent.")
-            return model
+            # Create client with API key
+            self.client = genai.Client(api_key=self.api_key)
+            self.model_name = model_name
+            print(f"Gemini client initialized successfully for model '{model_name}' in ResponseAgent.")
+            return self.client
         except Exception as e:
-            print(f"Error initializing Gemini model '{model_name}' for ResponseAgent: {e}")
+            print(f"Error initializing Gemini client for model '{model_name}' in ResponseAgent: {e}")
             return None
 
     def _construct_prompt(self, query: str, context: str) -> str:
@@ -88,7 +90,10 @@ class ResponseAgent(BaseAgent):
         prompt = self._construct_prompt(query, context)
 
         try:
-            response = await self.model.generate_content_async(prompt)
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt
+            )
             final_response = response.text
         except Exception as e:
             print(f"Error during response generation API call: {e}")
