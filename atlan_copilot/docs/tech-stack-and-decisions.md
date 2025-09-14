@@ -10,8 +10,7 @@ The following technologies were used to build the application, as specified in t
 -   **AI Orchestration**: [LangGraph](https://github.com/langchain-ai/langgraph)
 -   **Large Language Models (LLM)**: Google Gemini Family
     -   `gemini-2.5-flash`: Used for fast and efficient tasks like ticket classification.
-    -   `gemini-2.5-flash`: Used for more complex reasoning and high-quality response generation.
-        -   `models/text-embedding-004`: Used for generating text embeddings.
+    -   `models/text-embedding-004`: Used for generating text embeddings.
 -   **Frontend Framework**: [Streamlit](https://streamlit.io/)
 -   **Vector Database**: [Qdrant](https://qdrant.tech/)
 -   **Primary Database**: [MongoDB Atlas](https://www.mongodb.com/atlas)
@@ -70,10 +69,6 @@ The following technologies were used to build the application, as specified in t
     -   **Error Handling**: Comprehensive error handling with user-friendly feedback and graceful degradation.
 -   **Trade-off**: Slightly larger document sizes for processed tickets, but provides superior data consistency, query performance, and user experience. The unified approach significantly simplifies the codebase while delivering enterprise-grade functionality.
 
-### f. UI Development with Placeholder Backend
--   **Decision**: The Streamlit UI was developed with a placeholder chat backend before the LangGraph orchestrator was fully implemented.
--   **Rationale**: This allowed for parallel development and rapid prototyping of the user interface. The UI components were built and tested independently, with a clear contract for how they would eventually connect to the backend logic.
--   **Trade-off**: The UI provided a "mock" experience that was not fully representative of the final system's performance (e.g., response times).
 
 ### g. Advanced Ticket Management System
 -   **Decision**: Implemented a comprehensive ticket management system with clickable cards, detailed views, and AI-powered resolution.
@@ -89,7 +84,63 @@ The following technologies were used to build the application, as specified in t
     -   **Database Schema Updates**: Extended unified schema to include resolution data
 -   **Trade-off**: Increased complexity in navigation management, but provides superior user experience and functionality.
 
-### h. Knowledge Base Integration and Citation Enhancement
+### f. UI Architecture with Streamlit Multipage
+-   **Decision**: Implemented a multipage Streamlit application with specialized views for different user workflows.
+-   **Rationale**:
+    -   **User Experience**: Separate pages for dashboard analytics, ticket browsing, and detailed views provide better organization and performance
+    -   **Scalability**: Each page can be developed independently and optimized for its specific use case
+    -   **Navigation**: Clear navigation patterns with session state management for seamless user flow
+-   **Implementation Details**:
+    -   **Dashboard Page**: Analytics, batch processing, and system overview
+    -   **Tickets View Page**: Card-based ticket browsing with advanced filtering
+    -   **Ticket Detail Page**: 4-tab comprehensive analysis (Details, AI Analysis, Response, Internal)
+    -   **Session State**: Proper state management for ticket selection and navigation
+-   **Trade-off**: Increased complexity in state management, but provides superior user experience and maintainability.
+
+### g. Card-Based Ticket Display System
+-   **Decision**: Designed a responsive card-based layout for ticket display with visual status indicators and pill-style tags.
+-   **Rationale**:
+    -   **Visual Hierarchy**: Cards provide clear visual separation and organized information display
+    -   **Status Indicators**: Color-coded priority badges and status pills enable quick assessment
+    -   **Responsive Design**: Grid layout that adapts to different screen sizes
+    -   **Interactive Elements**: Clickable cards with hover effects and clear call-to-actions
+-   **Implementation Details**:
+    -   **Priority Colors**: Red (P0), Yellow (P1), Green (P2) priority indicators
+    -   **Status Pills**: Small, rounded badges for sentiment, priority, and topic tags
+    -   **Topic Tags**: Dynamic topic tag display with truncation for long tag lists
+    -   **Click Navigation**: Seamless navigation to detail views with session state
+-   **Trade-off**: Slightly more complex CSS/HTML generation, but significantly improves information density and user interaction.
+
+### h. Advanced Filtering and Search System
+-   **Decision**: Implemented multi-level filtering system with real-time updates and persistent state.
+-   **Rationale**:
+    -   **User Control**: Advanced filters allow users to find relevant tickets quickly
+    -   **Performance**: Database-level filtering reduces client-side processing
+    -   **State Persistence**: Filter selections persist across page refreshes
+    -   **Progressive Enhancement**: Basic filters always visible, advanced filters expandable
+-   **Implementation Details**:
+    -   **Priority Filter**: Single/multi-select priority level filtering
+    -   **Sentiment Filter**: Customer sentiment-based filtering
+    -   **Date Range**: Creation date filtering with date picker widgets
+    -   **Text Search**: Full-text search across subjects and content
+    -   **Real-time Updates**: Filters apply instantly without page refresh
+-   **Trade-off**: Increased database query complexity, but provides superior user experience and data exploration capabilities.
+
+### i. Status Indicators and Progress Feedback
+-   **Decision**: Added comprehensive real-time progress indicators for all long-running operations.
+-   **Rationale**:
+    -   **User Feedback**: Progress indicators prevent user confusion during processing
+    -   **Transparency**: Users can see exactly what's happening and progress made
+    -   **Error Handling**: Clear error messages and recovery options
+    -   **Professional UX**: Enterprise-grade feedback system builds user trust
+-   **Implementation Details**:
+    -   **Progress Bars**: Visual progress bars showing completion percentage
+    -   **Status Messages**: Detailed status updates (e.g., "Processing ticket 3/10")
+    -   **Container Management**: Separate containers for progress and status display
+    -   **Callback System**: Real-time updates through callback functions
+-   **Trade-off**: Slightly more complex UI code, but dramatically improves user experience during operations.
+
+### j. Knowledge Base Integration and Citation Enhancement
 -   **Decision**: Integrated Atlan Documentation and Developer Hub with enhanced citation system.
 -   **Rationale**:
     -   **Comprehensive Coverage**: Multiple knowledge sources provide complete information access
@@ -100,16 +151,3 @@ The following technologies were used to build the application, as specified in t
     -   **Semantic Chunking**: Intelligent document segmentation for better retrieval
     -   **Citation Enhancement**: Numbered citations with source URLs and snippets
 -   **Trade-off**: Increased processing time for knowledge base preparation, but significantly improved response quality and user experience.
-
-### i. Async/Await Compatibility Resolution ✅ RESOLVED
--   **Decision**: Fixed critical 'await outside async function' error in Streamlit dashboard
--   **Rationale**:
-    -   **Problem**: Streamlit runs in a synchronous execution context, but the application uses async database operations (MongoDB motor driver)
-    -   **Initial Issue**: Direct use of `await` in synchronous Streamlit functions caused `SyntaxError: 'await' outside async function`
-    -   **Solution**: Wrapped all async operations in proper async functions and used `asyncio.run_until_complete()` for Streamlit compatibility
--   **Implementation**:
-    -   Created `process_all_tickets()` async function to handle all MongoDB operations
-    -   Used proper event loop management with `asyncio.get_running_loop()` and `asyncio.new_event_loop()`
-    -   Ensured MongoDB connections are opened once and closed properly
--   **Result**: ✅ Streamlit app runs without errors, MongoDB operations work correctly, dashboard processes tickets successfully
--   **Impact**: Critical blocking issue resolved, enabling full dashboard functionality
