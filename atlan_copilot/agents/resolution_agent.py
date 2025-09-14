@@ -530,28 +530,65 @@ Would you like me to help you find more specific information or connect you with
 
     def _extract_snippet_around_url(self, context: str, url: str) -> str:
         """
-        Extract a text snippet around a URL in the context.
+        Extract a meaningful text snippet around a URL in the context.
+        Now extracts full content instead of truncated snippets for better user understanding.
         """
         try:
             url_index = context.find(url)
             if url_index == -1:
                 return "Reference documentation"
 
-            # Extract 100 characters around the URL
-            start = max(0, url_index - 50)
-            end = min(len(context), url_index + len(url) + 50)
+            # Find paragraph boundaries around the URL for more meaningful content
+            # Look for double newlines or paragraph markers
+            paragraph_markers = ['\n\n', '---', 'Context Snippet']
 
+            # Find the start of the current section/paragraph
+            start = url_index
+            for marker in paragraph_markers:
+                marker_index = context.rfind(marker, 0, url_index)
+                if marker_index != -1:
+                    start = marker_index
+                    break
+
+            # If no paragraph marker found, start 200 characters before URL
+            if start == url_index:
+                start = max(0, url_index - 200)
+
+            # Find the end of the current section/paragraph
+            end = url_index + len(url)
+            for marker in paragraph_markers:
+                marker_index = context.find(marker, url_index + len(url))
+                if marker_index != -1:
+                    end = marker_index + len(marker)
+                    break
+
+            # If no paragraph marker found, end 300 characters after URL
+            if end == url_index + len(url):
+                end = min(len(context), url_index + len(url) + 300)
+
+            # Extract the meaningful snippet
             snippet = context[start:end].strip()
 
-            # Clean up the snippet
-            if not snippet.startswith(' ') and start > 0:
-                snippet = '...' + snippet
-            if not snippet.endswith(' ') and end < len(context):
-                snippet = snippet + '...'
+            # Clean up the snippet - remove excessive markers and clean formatting
+            snippet = snippet.replace('--- Context Snippet', '').replace('---', '').strip()
+
+            # Limit to reasonable length but keep it meaningful (up to 500 characters)
+            if len(snippet) > 500:
+                # Try to cut at a sentence boundary
+                truncated = snippet[:500]
+                last_sentence_end = max(truncated.rfind('.'), truncated.rfind('!'), truncated.rfind('?'))
+                if last_sentence_end > 300:  # Only use sentence boundary if it's not too short
+                    snippet = snippet[:last_sentence_end + 1]
+                else:
+                    snippet = truncated + '...'
+
+            # Clean up formatting
+            snippet = ' '.join(snippet.split())  # Normalize whitespace
 
             return snippet if len(snippet) > 20 else "Reference documentation"
 
-        except:
+        except Exception as e:
+            print(f"Error extracting snippet for URL {url}: {e}")
             return "Reference documentation"
 
     def _format_citations(self, sources: List[Dict[str, Any]]) -> str:

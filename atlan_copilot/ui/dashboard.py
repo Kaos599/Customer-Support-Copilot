@@ -709,6 +709,23 @@ def add_tickets_from_file():
 
                 if inserted_ids:
                     st.success(f"✅ Successfully added {len(inserted_ids)} tickets to the database!")
+
+                    # Reload all tickets from database to update session state
+                    async def reload_all_tickets():
+                        mongo_client = MongoDBClient()
+                        await mongo_client.connect()
+                        all_tickets = await mongo_client.get_all_tickets()
+                        await mongo_client.close()
+                        return all_tickets
+
+                    try:
+                        updated_tickets = loop.run_until_complete(reload_all_tickets())
+                        st.session_state.ticket_data = updated_tickets
+                        st.session_state.data_cached_at = datetime.now()
+                        print(f"✅ Session state updated with {len(updated_tickets)} tickets after upload")
+                    except Exception as e:
+                        print(f"⚠️ Could not reload ticket data after upload: {e}")
+
                     # Clear analytics cache and refresh the page
                     display_overall_analytics_data.clear()
                     st.rerun()
@@ -885,6 +902,45 @@ def resolve_processed_tickets():
         with col3:
             st.metric("📊 Total Resolved", resolved_count + routed_count)
 
+def process_tickets_from_loaded_data(tickets_data: List[Dict]):
+    """
+    Process tickets using already loaded data and refresh the page when done.
+
+    Args:
+        tickets_data: List of ticket dictionaries already loaded from database
+    """
+    # Create progress indicators
+    progress_bar = st.progress(0)
+    progress_text = st.empty()
+    status_text = st.empty()
+
+    def update_processing_progress(current, total, message):
+        if total > 0:
+            progress = min(current / total, 1.0)
+            progress_bar.progress(progress)
+        progress_text.text(f"Progress: {current}/{total}")
+        status_text.text(message)
+
+    # Process tickets with progress callback
+    result = process_tickets_with_loaded_data_parallel(
+        tickets_data,
+        progress_callback=update_processing_progress
+    )
+
+    # Clear progress indicators
+    progress_bar.empty()
+    progress_text.empty()
+    status_text.empty()
+
+    # Show final result
+    if result and result.get("processed", 0) > 0:
+        st.success(f"✅ Successfully processed {result['processed']} tickets!")
+        # Page will auto-refresh due to st.rerun() in the processing function
+    elif result and result.get("errors", 0) > 0:
+        st.error(f"❌ Processing completed with {result['errors']} errors. Check logs for details.")
+    else:
+        st.info("ℹ️ No tickets were processed.")
+
 def process_tickets_with_loaded_data_parallel(tickets_data: List[Dict], progress_callback=None):
     """
     Process tickets using already loaded data with parallel classification.
@@ -978,6 +1034,23 @@ def process_tickets_with_loaded_data_parallel(tickets_data: List[Dict], progress
 
     # Clear analytics cache and trigger dashboard refresh
     if result and result.get("processed", 0) > 0:
+        # Reload ticket data from database to update session state
+        async def reload_ticket_data():
+            mongo_client = MongoDBClient()
+            await mongo_client.connect()
+            updated_tickets = await mongo_client.get_all_tickets()
+            await mongo_client.close()
+            return updated_tickets
+
+        # Update session state with fresh data from database
+        try:
+            updated_tickets = loop.run_until_complete(reload_ticket_data())
+            st.session_state.ticket_data = updated_tickets
+            st.session_state.data_cached_at = datetime.now()
+            print(f"✅ Session state updated with {len(updated_tickets)} tickets after processing")
+        except Exception as e:
+            print(f"⚠️ Could not reload ticket data after processing: {e}")
+
         display_overall_analytics_data.clear()
         st.rerun()
 
@@ -1064,6 +1137,23 @@ def resolve_tickets_with_loaded_data_parallel(tickets_data: List[Dict], progress
 
     # Clear analytics cache and trigger dashboard refresh
     if result and (result.get("resolved", 0) > 0 or result.get("routed", 0) > 0):
+        # Reload ticket data from database to update session state
+        async def reload_ticket_data():
+            mongo_client = MongoDBClient()
+            await mongo_client.connect()
+            updated_tickets = await mongo_client.get_all_tickets()
+            await mongo_client.close()
+            return updated_tickets
+
+        # Update session state with fresh data from database
+        try:
+            updated_tickets = loop.run_until_complete(reload_ticket_data())
+            st.session_state.ticket_data = updated_tickets
+            st.session_state.data_cached_at = datetime.now()
+            print(f"✅ Session state updated with {len(updated_tickets)} tickets after resolution")
+        except Exception as e:
+            print(f"⚠️ Could not reload ticket data after resolution: {e}")
+
         display_overall_analytics_data.clear()
         st.rerun()
 
