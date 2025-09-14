@@ -111,7 +111,15 @@ class GeminiEmbedder:
 
                 if result and hasattr(result, 'embeddings'):
                     print(f"Embedding generation successful for {len(texts)} texts.")
-                    return result.embeddings
+                    # Extract the actual float values from ContentEmbedding objects
+                    embeddings = []
+                    for embedding_obj in result.embeddings:
+                        if hasattr(embedding_obj, 'values'):
+                            embeddings.append(embedding_obj.values)
+                        else:
+                            # Fallback: try to convert the object directly
+                            embeddings.append(list(embedding_obj))
+                    return embeddings
                 else:
                     print(f"Warning: Unexpected response format from embedding API: {result}")
                     return []

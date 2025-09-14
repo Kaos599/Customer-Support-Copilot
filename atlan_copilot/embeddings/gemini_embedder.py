@@ -62,7 +62,15 @@ class GeminiEmbedder:
                 )
             )
             print("Embedding generation successful.")
-            return result.embeddings
+            # Extract the actual float values from ContentEmbedding objects
+            embeddings = []
+            for embedding_obj in result.embeddings:
+                if hasattr(embedding_obj, 'values'):
+                    embeddings.append(embedding_obj.values)
+                else:
+                    # Fallback: try to convert the object directly
+                    embeddings.append(list(embedding_obj))
+            return embeddings
         except Exception as e:
             print(f"An error occurred during embedding generation: {e}")
             return []
