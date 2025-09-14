@@ -236,3 +236,71 @@ class ClassificationAgent(BaseAgent):
             print(f"An error occurred during classification: {e}")
             # Return the original state without modification in case of an error
             return state
+
+    async def classify_ticket_batch(self, tickets: List[Dict[str, Any]],
+                                   progress_callback=None) -> List[Dict[str, Any]]:
+        """
+        Classify multiple tickets in parallel with controlled concurrency.
+
+        Args:
+            tickets: List of ticket dictionaries to classify
+            progress_callback: Optional callback function (current, total, message)
+
+        Returns:
+            List of classification results
+        """
+        if not self.model:
+            print("Error: Gemini model not initialized. Skipping batch classification.")
+            return []
+
+        if not tickets:
+            return []
+
+        import asyncio
+        from typing import Tuple
+
+        semaphore = asyncio.Semaphore(5)  # Limit to 5 concurrent requests
+        results = []
+
+        async def classify_single_ticket(ticket: Dict[str, Any], index: int) -> Tuple[int, Dict[str, Any]]:
+            """Classify a single ticket with semaphore control."""
+            async with semaphore:
+                try:
+                    ticket_id = ticket.get('id', f'ticket_{index}')
+
+                    if progress_callback:
+                        progress_callback(index, len(tickets), f"Classifying {ticket_id}...")
+
+                    # Prepare classification input
+                    classification_input = {
+                        "subject": ticket.get("subject", ""),
+                        "body": ticket.get("body", "")
+                    }
+
+                    # Execute classification
+                    result = await self.execute(classification_input)
+
+                    # Add ticket metadata to result
+                    result['ticket_id'] = ticket_id
+                    result['original_ticket'] = ticket
+
+                    return index, result
+
+                except Exception as e:
+                    print(f"Error classifying ticket {ticket.get('id', f'ticket_{index}')}: {e}")
+                    return index, {
+                        'ticket_id': ticket.get('id', f'ticket_{index}'),
+                        'error': str(e),
+                        'original_ticket': ticket
+                    }
+
+        # Create tasks for parallel execution
+        tasks = [classify_single_ticket(ticket, i) for i, ticket in enumerate(tickets)]
+        completed_tasks = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Sort results by original index and extract results
+        sorted_results = sorted([task for task in completed_tasks if isinstance(task, tuple)],
+                               key=lambda x: x[0])
+        results = [result for _, result in sorted_results]
+
+        return results
