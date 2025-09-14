@@ -107,6 +107,45 @@ class Orchestrator:
             raise RuntimeError("Graph is not compiled.")
 
         initial_state = {"query": query}
-        # Use ainvoke for asynchronous execution
-        final_state = await self.graph.ainvoke(initial_state)
-        return final_state
+
+        try:
+            # Use ainvoke for asynchronous execution
+            final_state = await self.graph.ainvoke(initial_state)
+            print(f"DEBUG: Orchestrator final state keys: {list(final_state.keys())}")
+            if "citations" in final_state:
+                print(f"DEBUG: Orchestrator citations count: {len(final_state['citations'])}")
+            return final_state
+        except Exception as e:
+            # Handle event loop conflicts by creating a new event loop
+            if "attached to a different loop" in str(e):
+                print("Event loop conflict detected, using fallback execution...")
+                return await self._invoke_with_new_loop(initial_state)
+            else:
+                raise e
+
+    async def _invoke_with_new_loop(self, initial_state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Fallback execution method that creates a new event loop to avoid conflicts.
+
+        Args:
+            initial_state: Initial state for the graph
+
+        Returns:
+            Final state after execution
+        """
+        # Create a new event loop for this execution
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        try:
+            # Execute the graph in the new loop
+            final_state = await self.graph.ainvoke(initial_state)
+            return final_state
+        finally:
+            # Clean up the loop
+            loop.close()
+            # Restore the original loop if it exists
+            try:
+                asyncio.set_event_loop(asyncio.get_event_loop())
+            except RuntimeError:
+                pass

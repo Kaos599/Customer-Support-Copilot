@@ -11,6 +11,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from agents.orchestrator import Orchestrator
+from utils.langextract_citation_handler import LangExtractCitationHandler
 
 def display_chat_interface():
     """
@@ -30,11 +31,35 @@ def display_chat_interface():
             {"role": "assistant", "content": "Hello! I'm here to help you with Atlan. Ask me anything about our platform, documentation, or customer support!"}
         ]
 
-    if "orchestrator" not in st.session_state:
+    # Initialize session state for orchestrator with better error handling
+    if "orchestrator" not in st.session_state or st.session_state.orchestrator is None:
         try:
+            # Initialize orchestrator in a new event loop to avoid conflicts
+            import asyncio
+            try:
+                loop = asyncio.get_running_loop()
+                # If we're in a running loop, create task for initialization
+                if loop:
+                    # For now, create a simple placeholder and initialize later
+                    st.session_state.orchestrator = "initializing"
+            except RuntimeError:
+                # No running loop, safe to initialize
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                st.session_state.orchestrator = Orchestrator()
+
+        except Exception as e:
+            st.error(f"❌ AI assistant initialization failed: {str(e)}")
+            st.info("Please refresh the page to try again.")
+            return
+
+    # Check if orchestrator is still initializing
+    if st.session_state.orchestrator == "initializing":
+        try:
+            # Try to initialize now
             st.session_state.orchestrator = Orchestrator()
         except Exception as e:
-            st.error(f"Failed to initialize AI assistant: {str(e)}")
+            st.error(f"❌ AI assistant is not properly initialized. Please refresh the page.")
             return
 
     # Display prior chat messages from history
@@ -42,20 +67,41 @@ def display_chat_interface():
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-            # Show additional metadata for assistant messages
+            # Show additional metadata for assistant messages only if they have metadata (responses to user queries)
             if message["role"] == "assistant" and "metadata" in message:
                 metadata = message["metadata"]
+
+                # Show query analysis section if classification data exists
                 if metadata.get("classification"):
-                    with st.expander("📋 Query Analysis", expanded=False):
+                    with st.expander("📋 Query Analysis", expanded=True):
                         classification = metadata["classification"]
                         st.write(f"**Topic Tags:** {', '.join(classification.get('topic_tags', []))}")
                         st.write(f"**Sentiment:** {classification.get('sentiment', 'N/A')}")
                         st.write(f"**Priority:** {classification.get('priority', 'N/A')}")
 
+                # Show sources section if citations exist
                 if metadata.get("citations") and len(metadata["citations"]) > 0:
-                    with st.expander("📚 Sources", expanded=False):
-                        for citation in metadata["citations"]:
-                            st.markdown(f"• {citation}")
+                    with st.expander("📚 Sources", expanded=True):
+                        citations = metadata["citations"]
+
+                        for i, citation in enumerate(citations, 1):
+                            # Format each citation with number and content
+                            st.markdown(f"**[{i}]** {citation.get('title', 'Source')}")
+
+                            # Show URL if available and not localhost
+                            url = citation.get('url', '')
+                            if url and not url.startswith(('http://localhost', 'http://127.0.0.1')):
+                                st.markdown(f"🔗 [{url}]({url})")
+
+                            # Show content snippet
+                            content = citation.get('content_snippet', '').strip()
+                            if content:
+                                # Limit snippet length for better UX
+                                if len(content) > 150:
+                                    content = content[:150] + "..."
+                                st.markdown(f"💬 {content}")
+
+                            st.divider()
 
     # Accept and process user input
     if prompt := st.chat_input("Ask me anything about Atlan..."):
@@ -70,6 +116,7 @@ def display_chat_interface():
 
             # Show processing indicator
             with st.spinner("🤔 Analyzing your question..."):
+                import asyncio  # Ensure asyncio is available
                 try:
                     # Get the event loop for async operations
                     loop = asyncio.get_running_loop()
@@ -100,16 +147,45 @@ def display_chat_interface():
                     if "classification" in result["data"]:
                         metadata["classification"] = result["data"]["classification"]
 
-                    # Add citations if available
+                    # Process citations (already formatted by RAG agent)
                     if "citations" in result["data"] and result["data"]["citations"]:
+                        # Citations are already properly formatted by the RAG agent
+                        # Just assign them directly to metadata
                         metadata["citations"] = result["data"]["citations"]
 
                     # Add the assistant response to chat history with metadata
-                    st.session_state.messages.append({
+                    message_with_metadata = {
                         "role": "assistant",
                         "content": full_response,
                         "metadata": metadata
-                    })
+                    }
+                    st.session_state.messages.append(message_with_metadata)
+
+                    # Update the message placeholder with final response
+                    message_placeholder.markdown(final_response)
+
+                    # Display metadata immediately in the current chat message context
+                    if metadata.get("classification"):
+                        with st.expander("📋 Query Analysis", expanded=True):
+                            classification = metadata["classification"]
+                            st.write(f"**Topic Tags:** {', '.join(classification.get('topic_tags', []))}")
+                            st.write(f"**Sentiment:** {classification.get('sentiment', 'N/A')}")
+                            st.write(f"**Priority:** {classification.get('priority', 'N/A')}")
+
+                    if metadata.get("citations") and len(metadata["citations"]) > 0:
+                        with st.expander("📚 Sources", expanded=True):
+                            citations = metadata["citations"]
+                            for i, citation in enumerate(citations, 1):
+                                st.markdown(f"**[{i}]** {citation.get('title', 'Source')}")
+                                url = citation.get('url', '')
+                                if url and not url.startswith(('http://localhost', 'http://127.0.0.1')):
+                                    st.markdown(f"🔗 [{url}]({url})")
+                                content = citation.get('content_snippet', '').strip()
+                                if content:
+                                    if len(content) > 150:
+                                        content = content[:150] + "..."
+                                    st.markdown(f"💬 {content}")
+                                st.divider()
 
                 else:
                     # Handle error case
@@ -142,10 +218,8 @@ async def process_query_async(query: str) -> Dict[str, Any]:
         # Extract additional metadata for display
         enhanced_result = result.copy()
 
-        # If we have classification data, extract citations from context
-        if "context" in result and result["context"]:
-            citations = extract_citations_from_context(result["context"])
-            enhanced_result["citations"] = citations
+        # Citations are now provided by the RAG agent with detailed metadata
+        # No need to extract from context - they come structured from LangExtract
 
         return {
             "success": True,
@@ -160,48 +234,3 @@ async def process_query_async(query: str) -> Dict[str, Any]:
             "error": error_msg
         }
 
-def extract_citations_from_context(context: str) -> list:
-    """
-    Extract citation URLs from the context string.
-
-    Args:
-        context: The context string returned by RAG
-
-    Returns:
-        List of citation strings
-    """
-    citations = []
-    if not context:
-        return citations
-
-    # Look for URL patterns in the context
-    import re
-
-    # Pattern to match URLs in the context
-    url_pattern = r'https?://[^\s<>"{}|\\^`\[\]]+'
-
-    # Find all URLs in the context
-    urls = re.findall(url_pattern, context)
-
-    # Also look for markdown-style links [text](url)
-    markdown_pattern = r'\[([^\]]+)\]\(([^)]+)\)'
-    markdown_links = re.findall(markdown_pattern, context)
-
-    # Add direct URLs
-    for url in urls:
-        if url not in [link[1] for link in markdown_links]:  # Avoid duplicates
-            citations.append(url)
-
-    # Add markdown links
-    for text, url in markdown_links:
-        citations.append(f"[{text}]({url})")
-
-    # Remove duplicates while preserving order
-    seen = set()
-    unique_citations = []
-    for citation in citations:
-        if citation not in seen:
-            unique_citations.append(citation)
-            seen.add(citation)
-
-    return unique_citations

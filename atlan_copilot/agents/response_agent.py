@@ -55,7 +55,7 @@ class ResponseAgent(BaseAgent):
         1.  Carefully analyze the user's query and the context provided below. The context is retrieved from Atlan's official documentation and knowledge base.
         2.  Synthesize a helpful answer that directly addresses the user's query.
         3.  **Crucially, you must base your answer strictly on the information given in the context.** Do not add any information that is not present in the context.
-        4.  If the context contains source URLs, you should cite them in your response using markdown links, like `[Source](https://...url...)`. This is very important for user trust.
+        4.  **IMPORTANT**: The context contains numbered citations like [1], [2], [3], etc. that have been inserted directly into the text. You MUST preserve these citation markers exactly as they appear in the context. Do not replace them, remove them, or modify them in any way. When you reference information that has these markers, include the markers in your response.
         5.  If the provided context does not contain enough information to answer the query, you MUST explicitly state that you could not find a specific answer in the documentation. Do not try to guess. You can suggest rephrasing the question or trying a broader query.
         6.  Keep the tone professional, helpful, and clear.
 
@@ -83,6 +83,7 @@ class ResponseAgent(BaseAgent):
         if not query or not context:
             return {**state, "response": "Error: Missing query or context for response generation."}
 
+
         prompt = self._construct_prompt(query, context)
 
         try:
@@ -94,4 +95,11 @@ class ResponseAgent(BaseAgent):
 
         print(f"Generated response: {final_response[:300]}...")
 
-        return {**state, "response": final_response}
+        # Include citations in the response if available in context
+        updated_state = {**state, "response": final_response}
+
+        # Extract citations from context if present (they should be formatted as [1], [2], etc.)
+        if "citations" in state:
+            updated_state["citations"] = state["citations"]
+
+        return updated_state

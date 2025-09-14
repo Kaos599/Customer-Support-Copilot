@@ -16,37 +16,41 @@ def test_citation_handler():
     handler = CitationHandler()
 
     # Test with sample context similar to what RAG agent produces
-    sample_context = """
-    ## Structured Information from Atlan Documentation
+    sample_context = """Here is some context I found that might be relevant to your question:
 
-    ### Features
-    - **AWS Lambda integration** [purpose: automate workflows, configuration_location: Settings > Integrations]
-    - **data lineage tracking** [location: Assets > Lineage tab, requirement: admin permissions]
+--- Context Snippet 1 ---
+Source: Atlan Documentation
+URL: https://docs.atlan.com/integrations/aws-lambda
+Title: AWS Lambda Integration Guide
+Content: Atlan integrates with AWS Lambda to automate workflows and extend Atlan's capabilities, helping you to automate data workflows and streamline routine tasks.
 
-    ### Source Context
-    --- Context Snippet 1 ---
-    Source: docs.atlan.com
-    URL: https://docs.atlan.com/product/integrations/automation
-    Title: Automation Integrations | Atlan Documentation
-    Content: Configure Atlan Integrations Automation Automation Integrations Integrate Atlan with automation tools such as AWS Lambda, Connections, Webhooks, Browser Exten...
-    """
+--- Context Snippet 2 ---
+Source: Atlan Documentation
+URL: https://docs.atlan.com/integrations/automation/setup
+Title: Integration Setup Guide
+Content: For general integration setup, Atlan suggests a three-step process: 1. Select an integration. 2. Configure the connection by following the integration-specific setup guide. 3. Test and activate the integration.
+"""
 
-    query = "how can i use AWS lambda with atlan"
+    sample_response = """Atlan integrates with AWS Lambda to automate workflows Source. The setup process involves a three-step process Source, Source."""
 
     print("Original context:")
     print(sample_context[:200] + "...")
 
-    # Test citation creation
-    cited_text, citations = handler.create_citations(sample_context, query)
+    print("Original response:")
+    print(sample_response)
 
-    print(f"\nCreated {len(citations)} citations")
-    print(f"\nCited text:")
-    print(cited_text[:400] + "...")
+    # Test the extract and process method
+    result = handler.extract_and_process_citations(sample_response, sample_context)
 
-    print(f"\nCitations details:")
-    for citation in citations:
-        print(f"[{citation['number']}] {citation['text'][:100]}...")
-        print(f"   Source: {citation['source']}, URL: {citation['url']}")
+    print(f"\nProcessed response with {len(result.sources)} sources:")
+    print(result.text)
+
+    print(f"\nSource details:")
+    for i, source in enumerate(result.sources, 1):
+        print(f"[{i}] {source.title}")
+        print(f"   URL: {source.url}")
+        print(f"   Snippet: {source.content_snippet[:100]}...")
+        print()
 
 if __name__ == "__main__":
     test_citation_handler()
