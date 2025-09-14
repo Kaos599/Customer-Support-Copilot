@@ -10,7 +10,11 @@ sys.path.insert(0, project_root)
 
 # Import UI view functions
 from ui.dashboard import display_dashboard
+from ui.tickets_view import display_tickets_view
 from ui.chat_interface import display_chat_interface
+
+# Import data caching utilities
+from utils.data_cache import initialize_app_data
 
 def main():
     """
@@ -24,6 +28,9 @@ def main():
         initial_sidebar_state="expanded"
     )
 
+    # Initialize application data on first load
+    data_loaded = initialize_app_data()
+
     st.title("🤖 Atlan Customer Support Copilot")
 
     # --- Sidebar for Navigation ---
@@ -31,7 +38,7 @@ def main():
         st.header("Navigation")
         page = st.selectbox(
             "Choose a page",
-            ("Dashboard & Classification", "Live Chat"),
+            ("Dashboard & Classification", "Tickets View", "Live Chat"),
             label_visibility="collapsed"
         )
         st.markdown("---")
@@ -46,6 +53,8 @@ def main():
     # --- Page Rendering ---
     if page == "Dashboard & Classification":
         display_dashboard()
+    elif page == "Tickets View":
+        display_tickets_view()
     elif page == "Live Chat":
         display_chat_interface()
     else:
