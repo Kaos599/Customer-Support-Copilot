@@ -11,6 +11,7 @@ if project_root not in sys.path:
 from agents.base_agent import BaseAgent
 from agents.rag_agent import RAGAgent
 from agents.classification_agent import ClassificationAgent
+from agents.response_agent import ResponseAgent
 from database.mongodb_client import MongoDBClient
 
 
@@ -26,6 +27,7 @@ class ResolutionAgent(BaseAgent):
     def __init__(self):
         self.rag_agent = RAGAgent()
         self.classification_agent = ClassificationAgent()
+        self.response_agent = ResponseAgent()
         self.rag_eligible_topics = [
             'How-to', 'Product', 'Best practices', 'API/SDK', 'SSO'
         ]
@@ -158,10 +160,14 @@ class ResolutionAgent(BaseAgent):
             mongo_client = MongoDBClient()
             await mongo_client.connect()
 
+            # Remove _id field from update data to avoid MongoDB immutable field error
+            update_data = processed_ticket.copy()
+            update_data.pop('_id', None)  # Remove _id field if it exists
+
             # Update the ticket in database
             await mongo_client.collection.update_one(
                 {"id": ticket.get("id")},
-                {"$set": processed_ticket}
+                {"$set": update_data}
             )
 
             await mongo_client.close()
@@ -323,7 +329,7 @@ If you have any urgent questions, please don't hesitate to follow up."""
     async def _generate_rag_response(self, ticket: Dict[str, Any], rag_result: Dict[str, Any],
                                    internal_analysis: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Generate a comprehensive RAG response with proper formatting and citations.
+        Generate a comprehensive RAG response using the ResponseAgent for proper formatting and citations.
 
         Args:
             ticket: Ticket data dictionary
@@ -336,6 +342,7 @@ If you have any urgent questions, please don't hesitate to follow up."""
         try:
             # Extract information from RAG results
             context = rag_result.get('context', '')
+            citations = rag_result.get('citations', [])
 
             # Determine knowledge base used
             topic = internal_analysis.get('topic', '')
@@ -344,22 +351,30 @@ If you have any urgent questions, please don't hesitate to follow up."""
             else:
                 knowledge_base = "Atlan Documentation (https://docs.atlan.com/)"
 
-            # Generate response based on available context
+            # Use ResponseAgent to generate proper response
             if context and len(context.strip()) > 50:
-                # Create a structured response based on the context
-                response = self._format_rag_response(ticket, context, internal_analysis)
+                # Prepare state for ResponseAgent
+                response_state = {
+                    'query': ticket.get('body', ticket.get('subject', 'General question')),
+                    'context': context,
+                    'citations': citations
+                }
+
+                # Generate response using ResponseAgent
+                response_result = await self.response_agent.execute(response_state)
+                response = response_result.get('response', '')
             else:
                 # Fallback response when no good context is available
                 response = self._generate_fallback_response(ticket, internal_analysis)
 
-            # Create source citations
+            # Create source citations for display
             sources = self._extract_sources_from_context(context)
-            citations = self._format_citations(sources)
+            citations_formatted = self._format_citations(sources)
 
             return {
                 'response': response,
                 'sources': sources,
-                'citations': citations,
+                'citations': citations_formatted,
                 'knowledge_base_used': knowledge_base,
                 'confidence': 0.85,  # Could be calculated based on context quality
                 'metadata': {
@@ -572,3 +587,70 @@ Would you like me to help you find more specific information or connect you with
         except Exception as e:
             print(f"Error storing resolution data: {e}")
             return False
+
+    async def resolve_tickets_batch(self, tickets: List[Dict[str, Any]],
+                                   progress_callback=None) -> List[Dict[str, Any]]:
+        """
+        Resolve multiple tickets in parallel with controlled concurrency.
+
+        Args:
+            tickets: List of ticket dictionaries to resolve
+            progress_callback: Optional callback function (current, total, message)
+
+        Returns:
+            List of resolution results
+        """
+        if not tickets:
+            return []
+
+        import asyncio
+        from typing import Tuple
+
+        semaphore = asyncio.Semaphore(5)  # Limit to 5 concurrent requests
+        results = []
+
+        async def resolve_single_ticket(ticket: Dict[str, Any], index: int) -> Tuple[int, Dict[str, Any]]:
+            """Resolve a single ticket with semaphore control."""
+            async with semaphore:
+                try:
+                    ticket_id = ticket.get('id', f'ticket_{index}')
+
+                    if progress_callback:
+                        progress_callback(index, len(tickets), f"Resolving {ticket_id}...")
+
+                    # Prepare resolution state
+                    resolution_state = {
+                        'ticket': ticket,
+                        'resolution_status': 'pending'
+                    }
+
+                    # Execute resolution
+                    result = await self.execute(resolution_state)
+
+                    # Add ticket metadata to result
+                    result['ticket_id'] = ticket_id
+                    result['original_ticket'] = ticket
+
+                    return index, result
+
+                except Exception as e:
+                    print(f"Error resolving ticket {ticket.get('id', f'ticket_{index}')}: {e}")
+                    return index, {
+                        'ticket_id': ticket.get('id', f'ticket_{index}'),
+                        'resolution': {
+                            'status': 'error',
+                            'message': str(e)
+                        },
+                        'original_ticket': ticket
+                    }
+
+        # Create tasks for parallel execution
+        tasks = [resolve_single_ticket(ticket, i) for i, ticket in enumerate(tickets)]
+        completed_tasks = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Sort results by original index and extract results
+        sorted_results = sorted([task for task in completed_tasks if isinstance(task, tuple)],
+                               key=lambda x: x[0])
+        results = [result for _, result in sorted_results]
+
+        return results
