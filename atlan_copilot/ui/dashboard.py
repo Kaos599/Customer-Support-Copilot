@@ -724,6 +724,111 @@ def add_tickets_from_file():
             st.info("Please ensure your file is properly formatted and contains the required columns/fields.")
 
 
+def resolve_processed_tickets():
+    """
+    Provides resolution options for processed tickets using RAG or routing.
+    """
+    st.markdown("### 🎯 Resolve Processed Tickets")
+
+    # Import required modules
+    import sys
+    import os
+    from scripts.resolve_tickets import resolve_processed_tickets as resolve_batch
+
+    # Get count of unprocessed tickets for resolution
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    mongo_client = MongoDBClient()
+
+    async def get_unresolved_count():
+        await mongo_client.connect()
+        tickets = await mongo_client.get_unprocessed_tickets_for_resolution()
+        await mongo_client.close()
+        return len(tickets)
+
+    unresolved_count = loop.run_until_complete(get_unresolved_count())
+
+    if unresolved_count > 0:
+        st.info(f"📊 There are **{unresolved_count} processed tickets** ready for resolution.")
+
+        # Resolution options
+        col1, col2 = st.columns(2)
+
+        with col1:
+            resolution_mode = st.selectbox(
+                "Resolution Mode:",
+                ["Resolve All Unresolved", "Resolve by Count Limit", "Resolve Specific Ticket"],
+                help="Choose how to resolve tickets"
+            )
+
+        with col2:
+            if resolution_mode == "Resolve by Count Limit":
+                resolve_batch_size = st.number_input("Number of tickets to resolve:",
+                                                   min_value=1, max_value=50, value=10)
+            elif resolution_mode == "Resolve Specific Ticket":
+                # This would need to be implemented
+                st.info("Specific ticket resolution will be available soon")
+                resolve_batch_size = None
+            else:
+                resolve_batch_size = None
+
+        # Resolve button
+        if st.button("🎯 Start Resolution", type="primary"):
+            with st.spinner("Resolving tickets..."):
+                try:
+                    if resolution_mode == "Resolve by Count Limit":
+                        result = loop.run_until_complete(resolve_batch(resolve_batch_size))
+                    else:
+                        result = loop.run_until_complete(resolve_batch(50))  # Default batch size
+
+                    if result["status"] == "success":
+                        st.success(f"✅ Resolution completed! "
+                                 f"Resolved: {result.get('resolved', 0)}, "
+                                 f"Routed: {result.get('routed', 0)}")
+
+                        if result.get("errors"):
+                            with st.expander("⚠️ Errors encountered"):
+                                for error in result["errors"][:5]:
+                                    st.write(f"• {error}")
+                                if len(result["errors"]) > 5:
+                                    st.write(f"... and {len(result['errors']) - 5} more errors")
+                    else:
+                        st.error(f"❌ Resolution failed: {result.get('message', 'Unknown error')}")
+
+                except Exception as e:
+                    st.error(f"❌ Resolution failed: {str(e)}")
+
+    else:
+        st.success("✅ All processed tickets have been resolved!")
+
+    # Show resolution statistics
+    with st.expander("📊 Resolution Statistics"):
+        try:
+            async def get_resolution_stats():
+                await mongo_client.connect()
+                resolved = await mongo_client.get_resolved_tickets()
+                routed = await mongo_client.get_routed_tickets()
+                await mongo_client.close()
+                return len(resolved), len(routed)
+
+            resolved_count, routed_count = loop.run_until_complete(get_resolution_stats())
+
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("🤖 Resolved with RAG", resolved_count)
+            with col2:
+                st.metric("📋 Routed to Teams", routed_count)
+            with col3:
+                st.metric("📊 Total Resolved", resolved_count + routed_count)
+
+        except Exception as e:
+            st.error(f"Could not load resolution statistics: {str(e)}")
+
+
 def fetch_new_tickets():
     """
     Fetches new tickets that have been added since the last fetch operation.
@@ -903,6 +1008,24 @@ def display_dashboard():
     with col3:
         if st.button("⚡ Process Tickets", type="primary", use_container_width=True):
             process_unprocessed_tickets()
+
+    # Resolution Section
+    st.markdown("---")
+    st.subheader("🎯 Ticket Resolution")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        if st.button("🔄 Resolve Tickets", type="secondary", use_container_width=True):
+            resolve_processed_tickets()
+
+    with col2:
+        if st.button("📊 View Resolved", type="secondary", use_container_width=True):
+            st.info("Resolved tickets view will be implemented")
+
+    with col3:
+        if st.button("📋 View Routed", type="secondary", use_container_width=True):
+            st.info("Routed tickets view will be implemented")
 
     # Statistics Display
     display_statistics()

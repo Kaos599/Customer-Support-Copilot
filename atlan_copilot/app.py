@@ -31,24 +31,70 @@ def main():
     # Initialize application data on first load
     data_loaded = initialize_app_data()
 
+    # Handle navigation from session state
+    if 'current_view' not in st.session_state:
+        st.session_state.current_view = "Dashboard & Classification"
+
+    page = st.session_state.current_view
+
+    # --- Sidebar Navigation ---
+    with st.sidebar:
+        st.header("🎯 Navigation")
+
+        # Navigation buttons
+        if st.button("📊 Dashboard", use_container_width=True,
+                    type="primary" if page == "Dashboard & Classification" else "secondary"):
+            st.session_state.current_view = "Dashboard & Classification"
+            st.rerun()
+
+        if st.button("🎫 Tickets", use_container_width=True,
+                    type="primary" if page == "Tickets View" else "secondary"):
+            st.session_state.current_view = "Tickets View"
+            st.rerun()
+
+        if st.button("💬 Chat", use_container_width=True,
+                    type="primary" if page == "Live Chat" else "secondary"):
+            st.session_state.current_view = "Live Chat"
+            st.rerun()
+
+        st.markdown("---")
+
+        # Additional sidebar content
+        st.info(
+            "🤖 **AI-Powered Support**\n\n"
+            "• Automatic ticket classification\n"
+            "• AI-generated responses\n"
+            "• Knowledge base integration\n"
+            "• Smart routing system"
+        )
+
+        st.markdown("### 📊 Quick Stats")
+        try:
+            from database.mongodb_client import MongoDBClient
+            import asyncio
+
+            async def get_stats():
+                mongo_client = MongoDBClient()
+                await mongo_client.connect()
+                stats = await mongo_client.get_processing_stats()
+                await mongo_client.close()
+                return stats
+
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            stats = loop.run_until_complete(get_stats())
+
+            st.metric("Total Tickets", stats.get("total_tickets", 0))
+            st.metric("Processed", stats.get("total_processed", 0))
+            st.metric("Resolved", stats.get("total_resolved", 0))
+            st.metric("Routed", stats.get("total_routed", 0))
+        except:
+            st.caption("Stats loading...")
+
+    # Show main header
     st.title("🤖 Atlan Customer Support Copilot")
 
-    # --- Sidebar for Navigation ---
-    with st.sidebar:
-        st.header("Navigation")
-        page = st.selectbox(
-            "Choose a page",
-            ("Dashboard & Classification", "Tickets View", "Live Chat"),
-            label_visibility="collapsed"
-        )
-        st.markdown("---")
-        st.info(
-            "This application uses AI to automatically classify customer support tickets "
-            "and assist with generating responses using Atlan's documentation."
-        )
-        st.markdown(
-            "**Phase:** UI Development (with placeholder backend)"
-        )
+    st.markdown("---")
 
     # --- Page Rendering ---
     if page == "Dashboard & Classification":
