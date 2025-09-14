@@ -153,7 +153,10 @@ venv.bak/
 
 # mkdocs documentation
 /site
-
+langextract_guide.md
+tickets.md
+validate_improvements.py
+test_caching.py
 # mypy
 .mypy_cache/
 .dmypy.json

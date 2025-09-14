@@ -898,6 +898,7 @@ def display_dashboard():
     with col2:
         if st.button("🔄 Fetch New Tickets", type="secondary", use_container_width=True):
             fetch_new_tickets()
+            st.rerun()
 
     with col3:
         if st.button("⚡ Process Tickets", type="primary", use_container_width=True):
@@ -915,22 +916,13 @@ def display_dashboard():
     with tab1:
         st.subheader("All Tickets Overview")
 
-        # Load all tickets for display
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+        # Load all tickets from cached session state
+        tickets_data = st.session_state.get("ticket_data", [])
 
-        mongo_client = MongoDBClient()
-
-        async def load_all_tickets():
-            await mongo_client.connect()
-            tickets = await mongo_client.get_all_tickets()
-            await mongo_client.close()
-            return tickets
-
-        tickets_data = loop.run_until_complete(load_all_tickets())
+        # Show cache status
+        if st.session_state.get("data_cached_at"):
+            cache_time = st.session_state.data_cached_at
+            st.caption(f"📊 Data last updated: {cache_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
         if tickets_data:
             # Convert to DataFrame for display

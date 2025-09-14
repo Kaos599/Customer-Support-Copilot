@@ -274,9 +274,12 @@ class MongoDBClient:
             print(f"❌ Error getting processing stats: {e}")
             return {}
 
-    async def get_unprocessed_tickets(self) -> List[Dict]:
+    async def get_unprocessed_tickets(self, limit: int = 1000) -> List[Dict]:
         """
-        Retrieves all unprocessed tickets from the unified collection.
+        Retrieves unprocessed tickets from the unified collection.
+
+        Args:
+            limit: Maximum number of tickets to retrieve
 
         Returns:
             A list of unprocessed ticket documents.
@@ -287,7 +290,8 @@ class MongoDBClient:
 
         tickets = []
         try:
-            async for document in self.collection.find({"processed": False}):
+            cursor = self.collection.find({"processed": False}).limit(limit)
+            async for document in cursor:
                 document['_id'] = str(document['_id'])
                 tickets.append(document)
         except Exception as e:
