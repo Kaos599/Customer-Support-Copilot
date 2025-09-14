@@ -1,4 +1,4 @@
-import streamlit as st
+﻿import streamlit as st
 import pandas as pd
 import asyncio
 from typing import List, Dict, Any
@@ -431,34 +431,11 @@ def display_overall_analytics():
 
 def process_unprocessed_tickets():
     """
-    Provides batch processing options for unprocessed tickets.
+    Provides simple batch processing options for unprocessed tickets with status indicators.
     """
     st.markdown("### ⚡ Process Unprocessed Tickets")
 
-    # Processing options
-    col1, col2 = st.columns(2)
-
-    with col1:
-        process_mode = st.selectbox(
-            "Processing Mode:",
-            ["Process All Unprocessed", "Process by Priority", "Process by Count Limit", "Process Specific Tickets"],
-            help="Choose how to process tickets"
-        )
-
-    with col2:
-        if process_mode == "Process by Count Limit":
-            batch_size = st.number_input("Number of tickets to process:", min_value=1, max_value=100, value=10)
-        elif process_mode == "Process by Priority":
-            priority_filter = st.multiselect(
-                "Priorities to process:",
-                ["P0 (High)", "P1 (Medium)", "P2 (Low)"],
-                default=["P0 (High)", "P1 (Medium)"],
-                help="Process only tickets that will be classified with these priorities"
-            )
-        else:
-            batch_size = None
-
-    # Show unprocessed ticket count
+    # Show unprocessed ticket count with status indicator
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
@@ -475,27 +452,49 @@ def process_unprocessed_tickets():
 
     unprocessed_count = loop.run_until_complete(get_unprocessed_count())
 
+    # Status indicator
     if unprocessed_count > 0:
-        st.info(f"📊 There are **{unprocessed_count} unprocessed tickets** ready for classification.")
+        # Visual status card for unprocessed tickets
+        st.markdown("""
+        <div style="background-color: #fff3e0; padding: 15px; border-radius: 10px; border-left: 5px solid #ff9800; margin-bottom: 15px;">
+            <h4 style="color: #f57c00; margin: 0; display: flex; align-items: center;">
+                <span style="font-size: 20px; margin-right: 8px;">🟡</span>
+                Ready for AI Processing
+            </h4>
+            <p style="margin: 8px 0 0 0; color: #424242;">
+                <strong>{} tickets</strong> waiting for AI classification and analysis.
+            </p>
+        </div>
+        """.format(unprocessed_count), unsafe_allow_html=True)
 
-        # Process button
-        if st.button("🚀 Start Processing", type="primary"):
-            process_tickets_batch(process_mode, batch_size if 'batch_size' in locals() else None,
-                                priority_filter if 'priority_filter' in locals() else None)
+        # Simple process button
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            if st.button("🚀 Start AI Processing", type="primary", use_container_width=True):
+                process_tickets_batch("Process All Unprocessed", None, None)
+
+        with col2:
+            st.markdown("""
+            <div style="background-color: #e8f5e8; padding: 10px; border-radius: 5px; text-align: center;">
+                <small style="color: #2e7d32;">
+                    ⏱️ ~{:.1f} min estimated
+                </small>
+            </div>
+            """.format(unprocessed_count * 0.5), unsafe_allow_html=True)
+
     else:
-        st.success("✅ All tickets are already processed!")
-
-    # Advanced processing options
-    with st.expander("⚙️ Advanced Processing Options"):
-        st.markdown("**Rate Limiting:**")
-        rate_limit = st.slider("Requests per minute:", min_value=1, max_value=15, value=12,
-                             help="Adjust to stay within API rate limits")
-
-        st.markdown("**Processing Behavior:**")
-        stop_on_error = st.checkbox("Stop on first error", value=False,
-                                  help="Stop processing if a ticket fails to classify")
-        skip_duplicates = st.checkbox("Skip duplicate tickets", value=True,
-                                    help="Skip tickets that may have been processed elsewhere")
+        # Success status for all processed
+        st.markdown("""
+        <div style="background-color: #e8f5e8; padding: 15px; border-radius: 10px; border-left: 5px solid #4caf50;">
+            <h4 style="color: #2e7d32; margin: 0; display: flex; align-items: center;">
+                <span style="font-size: 20px; margin-right: 8px;">✅</span>
+                All Tickets Processed
+            </h4>
+            <p style="margin: 8px 0 0 0; color: #424242;">
+                All tickets have been analyzed and classified by AI.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
 
 
 @st.cache_data(show_spinner=False)
@@ -729,16 +728,17 @@ def add_tickets_from_file():
 
 def resolve_processed_tickets():
     """
-    Provides resolution options for processed tickets using RAG or routing.
+    Provides simple resolution options for tickets with status indicators.
+    Will process tickets first if they're not already processed.
     """
-    st.markdown("### 🎯 Resolve All Unprocessed Tickets")
+    st.markdown("### 🎯 Resolve All Tickets")
 
     # Import required modules
     import sys
     import os
     from scripts.resolve_tickets import resolve_processed_tickets as resolve_batch
 
-    # Get count of unprocessed tickets for resolution
+    # Get count of tickets that need resolution
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
@@ -747,116 +747,149 @@ def resolve_processed_tickets():
 
     mongo_client = MongoDBClient()
 
-    async def get_unresolved_count():
+    async def get_tickets_needing_resolution():
         await mongo_client.connect()
         tickets = await mongo_client.get_unprocessed_tickets_for_resolution()
         await mongo_client.close()
-        return len(tickets)
+        return len(tickets), tickets
 
-    unresolved_count = loop.run_until_complete(get_unresolved_count())
+    ticket_count, tickets = loop.run_until_complete(get_tickets_needing_resolution())
 
-    if unresolved_count > 0:
-        st.info(f"📊 There are **{unresolved_count} processed tickets** ready for resolution.")
+    if ticket_count > 0:
+        # Check how many are unprocessed vs processed but unresolved
+        unprocessed_count = sum(1 for t in tickets if not t.get('processed', False))
+        processed_unresolved_count = ticket_count - unprocessed_count
 
-        # Resolution options
-        col1, col2 = st.columns(2)
+        # Status indicator based on ticket types
+        if unprocessed_count > 0 and processed_unresolved_count > 0:
+            # Mixed status - both unprocessed and unresolved
+            st.markdown("""
+            <div style="background-color: #fff3e0; padding: 15px; border-radius: 10px; border-left: 5px solid #ff9800; margin-bottom: 15px;">
+                <h4 style="color: #f57c00; margin: 0; display: flex; align-items: center;">
+                    <span style="font-size: 20px; margin-right: 8px;">🔄</span>
+                    Mixed Status - Ready for Resolution
+                </h4>
+                <p style="margin: 8px 0 0 0; color: #424242;">
+                    <strong>{} unprocessed tickets</strong> will be classified first, then <strong>{} processed tickets</strong> will be resolved.
+                </p>
+            </div>
+            """.format(unprocessed_count, processed_unresolved_count), unsafe_allow_html=True)
 
+        elif unprocessed_count > 0:
+            # Only unprocessed tickets
+            st.markdown("""
+            <div style="background-color: #fff3e0; padding: 15px; border-radius: 10px; border-left: 5px solid #ff9800; margin-bottom: 15px;">
+                <h4 style="color: #f57c00; margin: 0; display: flex; align-items: center;">
+                    <span style="font-size: 20px; margin-right: 8px;">🟡</span>
+                    Unprocessed Tickets Found
+                </h4>
+                <p style="margin: 8px 0 0 0; color: #424242;">
+                    <strong>{} tickets</strong> need AI classification and resolution.
+                </p>
+            </div>
+            """.format(unprocessed_count), unsafe_allow_html=True)
+
+        else:
+            # Only processed but unresolved tickets
+            st.markdown("""
+            <div style="background-color: #e3f2fd; padding: 15px; border-radius: 10px; border-left: 5px solid #2196f3; margin-bottom: 15px;">
+                <h4 style="color: #1976d2; margin: 0; display: flex; align-items: center;">
+                    <span style="font-size: 20px; margin-right: 8px;">🎯</span>
+                    Ready for AI Resolution
+                </h4>
+                <p style="margin: 8px 0 0 0; color: #424242;">
+                    <strong>{} processed tickets</strong> ready for AI-powered resolution.
+                </p>
+            </div>
+            """.format(processed_unresolved_count), unsafe_allow_html=True)
+
+        # Simple resolve button
+        col1, col2 = st.columns([1, 1])
         with col1:
-            resolution_mode = st.selectbox(
-                "Resolution Mode:",
-                ["Resolve All Unresolved", "Resolve by Count Limit", "Resolve Specific Ticket"],
-                help="Choose how to resolve tickets"
-            )
+            if st.button("🎯 Start AI Resolution", type="primary", use_container_width=True):
+                # Create progress containers
+                progress_container = st.container()
+                status_container = st.container()
 
-        with col2:
-            if resolution_mode == "Resolve by Count Limit":
-                resolve_batch_size = st.number_input("Number of tickets to resolve:",
-                                                   min_value=1, max_value=50, value=10)
-            elif resolution_mode == "Resolve Specific Ticket":
-                # This would need to be implemented
-                st.info("Specific ticket resolution will be available soon")
-                resolve_batch_size = None
-            else:
-                resolve_batch_size = None
+                try:
+                    batch_size = min(ticket_count, 50)  # Default batch size
 
-        # Resolve button
-        if st.button("🎯 Start Resolution", type="primary"):
-            # Create progress containers
-            progress_container = st.container()
-            status_container = st.container()
+                    with progress_container:
+                        progress_bar = st.progress(0)
+                        progress_text = st.empty()
 
-            try:
-                # Determine batch size
-                if resolution_mode == "Resolve by Count Limit":
-                    batch_size = resolve_batch_size
-                else:
-                    batch_size = min(unresolved_count, 50)  # Default batch size or all unresolved
+                    with status_container:
+                        status_text = st.empty()
 
-                with progress_container:
-                    progress_bar = st.progress(0)
-                    progress_text = st.empty()
+                    # Show initial status
+                    progress_text.write(f"🎯 Preparing to resolve **{batch_size} tickets**...")
+                    status_text.write("📊 Status: Initializing resolution process...")
 
-                with status_container:
-                    status_text = st.empty()
+                    # Call resolution with progress callback
+                    async def resolve_with_progress(batch_size):
+                        try:
+                            # Import the resolution function
+                            from scripts.resolve_tickets import resolve_processed_tickets_with_progress
 
-                # Show initial status
-                progress_text.write(f"🎯 Preparing to resolve **{batch_size} tickets**...")
-                status_text.write("📊 Status: Initializing resolution process...")
+                            # Use the progress-aware version
+                            result = await resolve_processed_tickets_with_progress(
+                                batch_size=batch_size,
+                                progress_callback=lambda current, total, message:
+                                    update_progress(current, total, message)
+                            )
+                            return result
+                        except AttributeError:
+                            # Fall back to regular resolution if progress version doesn't exist
+                            progress_text.write("⚠️ Using standard resolution (progress indicators not available)")
+                            return await resolve_batch(batch_size)
 
-                # Call resolution with progress callback
-                async def resolve_with_progress(batch_size):
-                    try:
-                        # Import the resolution function
-                        from scripts.resolve_tickets import resolve_processed_tickets_with_progress
+                    def update_progress(current, total, message):
+                        """Update progress indicators"""
+                        if total > 0:
+                            progress = min(current / total, 1.0)
+                            progress_bar.progress(progress)
+                            progress_text.write(f"🎯 Resolving tickets: **{current}/{total}** completed")
+                            status_text.write(f"📊 {message}")
 
-                        # Use the progress-aware version
-                        result = await resolve_processed_tickets_with_progress(
-                            batch_size=batch_size,
-                            progress_callback=lambda current, total, message:
-                                update_progress(current, total, message)
-                        )
-                        return result
-                    except AttributeError:
-                        # Fall back to regular resolution if progress version doesn't exist
-                        progress_text.write("⚠️ Using standard resolution (progress indicators not available)")
-                        return await resolve_batch(batch_size)
+                    # Execute resolution
+                    result = loop.run_until_complete(resolve_with_progress(batch_size))
 
-                def update_progress(current, total, message):
-                    """Update progress indicators"""
-                    if total > 0:
-                        progress = min(current / total, 1.0)
-                        progress_bar.progress(progress)
-                        progress_text.write(f"🎯 Resolving tickets: **{current}/{total}** completed")
-                        status_text.write(f"📊 {message}")
+                    # Final status update
+                    progress_bar.progress(1.0)
+                    progress_text.write(f"✅ Resolution completed! **{batch_size} tickets processed**")
 
-                # Execute resolution
-                result = loop.run_until_complete(resolve_with_progress(batch_size))
+                    if result["status"] == "success":
+                        resolved = result.get('resolved', 0)
+                        routed = result.get('routed', 0)
+                        status_text.write(f"📊 Final: **{resolved} resolved** with AI, **{routed} routed** to teams")
 
-                # Final status update
-                progress_bar.progress(1.0)
-                progress_text.write(f"✅ Resolution completed! **{batch_size} tickets processed**")
+                        if result.get("errors"):
+                            with st.expander("⚠️ Errors encountered"):
+                                for error in result["errors"][:5]:
+                                    st.write(f"• {error}")
+                                if len(result["errors"]) > 5:
+                                    st.write(f"... and {len(result['errors']) - 5} more errors")
+                    else:
+                        status_text.write(f"❌ Resolution failed: {result.get('message', 'Unknown error')}")
 
-                if result["status"] == "success":
-                    resolved = result.get('resolved', 0)
-                    routed = result.get('routed', 0)
-                    status_text.write(f"📊 Final: **{resolved} resolved** with AI, **{routed} routed** to teams")
-
-                    if result.get("errors"):
-                        with st.expander("⚠️ Errors encountered"):
-                            for error in result["errors"][:5]:
-                                st.write(f"• {error}")
-                            if len(result["errors"]) > 5:
-                                st.write(f"... and {len(result['errors']) - 5} more errors")
-                else:
-                    status_text.write(f"❌ Resolution failed: {result.get('message', 'Unknown error')}")
-
-            except Exception as e:
-                progress_text.write("❌ Resolution failed")
-                status_text.write(f"❌ Error: {str(e)}")
-                st.error(f"❌ Resolution failed: {str(e)}")
+                except Exception as e:
+                    progress_text.write("❌ Resolution failed")
+                    status_text.write(f"❌ Error: {str(e)}")
+                    st.error(f"❌ Resolution failed: {str(e)}")
 
     else:
-        st.success("✅ All processed tickets have been resolved!")
+        # Success status for all resolved
+        st.markdown("""
+        <div style="background-color: #e8f5e8; padding: 15px; border-radius: 10px; border-left: 5px solid #4caf50;">
+            <h4 style="color: #2e7d32; margin: 0; display: flex; align-items: center;">
+                <span style="font-size: 20px; margin-right: 8px;">✅</span>
+                All Tickets Resolved
+            </h4>
+            <p style="margin: 8px 0 0 0; color: #424242;">
+                All tickets have been processed and resolved by AI.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
 
     # Show resolution statistics
     with st.expander("📊 Resolution Statistics"):

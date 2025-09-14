@@ -69,6 +69,7 @@ class MongoDBClient:
             for ticket in tickets_data:
                 ticket.setdefault('processed', False)
                 ticket.setdefault('status', 'unprocessed')
+                ticket.setdefault('resolution', 'Not Done')
                 ticket.setdefault('created_at', datetime.utcnow())
                 ticket.setdefault('updated_at', datetime.utcnow())
 
@@ -243,8 +244,17 @@ class MongoDBClient:
             total_tickets = await self.collection.count_documents({})
 
             # Get status-based counts with correct logic
-            # A ticket is unprocessed if status is "unprocessed"
-            total_unprocessed = await self.collection.count_documents({"status": "unprocessed"})
+            # A ticket is unprocessed if:
+            # 1. status is "unprocessed", OR
+            # 2. processed field doesn't exist (base format), OR
+            # 3. processed is False
+            total_unprocessed = await self.collection.count_documents({
+                "$or": [
+                    {"status": "unprocessed"},
+                    {"processed": {"$exists": False}},
+                    {"processed": False}
+                ]
+            })
 
             # A ticket is processed if processed=true AND status="processed"
             total_processed = await self.collection.count_documents({
@@ -296,6 +306,10 @@ class MongoDBClient:
     async def get_unprocessed_tickets(self, limit: int = 1000) -> List[Dict]:
         """
         Retrieves unprocessed tickets from the unified collection.
+        Considers tickets as unprocessed if:
+        1. processed field is False
+        2. processed field doesn't exist (base format from website)
+        3. status is "unprocessed"
 
         Args:
             limit: Maximum number of tickets to retrieve
@@ -309,7 +323,15 @@ class MongoDBClient:
 
         tickets = []
         try:
-            cursor = self.collection.find({"processed": False}).limit(limit)
+            # Find tickets that are not processed (either processed=False, or processed field missing, or status=unprocessed)
+            cursor = self.collection.find({
+                "$or": [
+                    {"processed": False},
+                    {"processed": {"$exists": False}},
+                    {"status": "unprocessed"}
+                ]
+            }).sort("created_at", -1).limit(limit)
+
             async for document in cursor:
                 document['_id'] = str(document['_id'])
                 tickets.append(document)
@@ -556,13 +578,15 @@ class MongoDBClient:
 
     async def get_unprocessed_tickets_for_resolution(self, limit: int = 100) -> List[Dict]:
         """
-        Retrieves processed tickets that haven't been resolved yet.
+        Retrieves tickets that need resolution. This includes:
+        1. Processed tickets that haven't been resolved yet
+        2. Tickets in base format (no processed/status fields) that need processing first
 
         Args:
             limit: Maximum number of tickets to retrieve
 
         Returns:
-            List of processed tickets without resolution data
+            List of tickets that need resolution processing
         """
         if self.collection is None:
             print("Error: MongoDB connection not established. Call connect() first.")
@@ -570,10 +594,16 @@ class MongoDBClient:
 
         tickets = []
         try:
-            # Find processed tickets that don't have resolution data
-            cursor = self.collection.find(
-                {"processed": True, "resolution": {"$exists": False}}
-            ).sort("created_at", -1).limit(limit)
+            # Find tickets that need resolution:
+            # 1. Processed tickets without resolution data, OR
+            # 2. Tickets in base format (no processed field) that need processing first
+            cursor = self.collection.find({
+                "$or": [
+                    {"processed": True, "resolution": {"$exists": False}},  # Processed but not resolved
+                    {"processed": {"$exists": False}},  # Base format tickets
+                    {"processed": False}  # Unprocessed tickets
+                ]
+            }).sort("created_at", -1).limit(limit)
 
             async for document in cursor:
                 document['_id'] = str(document['_id'])
