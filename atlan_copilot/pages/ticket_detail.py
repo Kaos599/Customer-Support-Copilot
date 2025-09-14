@@ -455,6 +455,9 @@ def display_response_and_resolution(ticket: Dict[str, Any]):
     """
     st.subheader("💬 Response & Resolution")
 
+    # Get ticket ID for use in keys
+    ticket_id = ticket.get('id', 'unknown')
+
     # Check if ticket has been resolved
     resolution_data = ticket.get('resolution', {})
 
@@ -479,6 +482,7 @@ def display_response_and_resolution(ticket: Dict[str, Any]):
                 border-radius: 5px;
                 font-size: 16px;
                 line-height: 1.6;
+                color: #000000;
             ">
             """ + response_text + """
             </div>
@@ -527,16 +531,21 @@ def display_response_and_resolution(ticket: Dict[str, Any]):
 
                     # Show snippet if requested
                     if st.session_state.get(f"show_snippet_{ticket_id}_{selected_index}", False) and source.get('snippet'):
+                        # Display full snippet without truncation
+                        full_snippet = source['snippet']
                         st.markdown("""
                         <div style="
                             background-color: #e9ecef;
+                            color: #000000;
                             padding: 10px;
                             margin: 5px 0 15px 20px;
                             border-radius: 5px;
                             border-left: 3px solid #6c757d;
                             font-size: 14px;
+                            max-height: 300px;
+                            overflow-y: auto;
                         ">
-                        """ + source['snippet'][:300] + ("..." if len(source['snippet']) > 300 else "") + """
+                        """ + full_snippet + """
                         </div>
                         """, unsafe_allow_html=True)
 
