@@ -253,6 +253,18 @@ class MongoDBClient:
                 "processing_metadata.processed_at": {"$gte": today}
             })
 
+            # Get resolved tickets count
+            total_resolved = await self.collection.count_documents({
+                "processed": True,
+                "resolution.status": "resolved"
+            })
+
+            # Get routed tickets count
+            total_routed = await self.collection.count_documents({
+                "processed": True,
+                "resolution.status": "routed"
+            })
+
             # Get priority distribution for processed tickets
             pipeline = [
                 {"$match": {"processed": True}},
@@ -268,6 +280,8 @@ class MongoDBClient:
                 "total_processed": total_processed,
                 "total_unprocessed": total_unprocessed,
                 "processed_today": processed_today,
+                "total_resolved": total_resolved,
+                "total_routed": total_routed,
                 "priority_distribution": priority_stats
             }
         except Exception as e:
@@ -423,5 +437,141 @@ class MongoDBClient:
                 tickets.append(document)
         except Exception as e:
             print(f"Error retrieving tickets with advanced filters: {e}")
+
+        return tickets
+
+    async def update_ticket_with_resolution(self, ticket_id: str, resolution_data: Dict) -> bool:
+        """
+        Updates a processed ticket with resolution data (RAG response or routing information).
+
+        Args:
+            ticket_id: The ticket ID to update
+            resolution_data: Dictionary containing resolution information with the following structure:
+                {
+                    "status": "resolved" or "routed",
+                    "response": "AI-generated response text" (for resolved status),
+                    "sources": [{"url": "source_url", "snippet": "relevant_text"}] (for resolved status),
+                    "generated_at": "timestamp",
+                    "confidence": 0.85,
+                    "routed_to": "team_name" (for routed status),
+                    "routing_reason": "reason for routing" (for routed status)
+                }
+
+        Returns:
+            True if update was successful, False otherwise
+        """
+        if self.collection is None:
+            print("Error: MongoDB connection not established. Call connect() first.")
+            return False
+
+        try:
+            # Add timestamp if not provided
+            if 'generated_at' not in resolution_data:
+                resolution_data['generated_at'] = datetime.now()
+
+            # Update the ticket with resolution data
+            update_result = await self.collection.update_one(
+                {"id": ticket_id, "processed": True},
+                {
+                    "$set": {
+                        "resolution": resolution_data,
+                        "updated_at": datetime.now()
+                    }
+                }
+            )
+
+            if update_result.modified_count > 0:
+                print(f"Successfully updated ticket {ticket_id} with resolution data")
+                return True
+            else:
+                print(f"No ticket found with ID {ticket_id} or no changes made")
+                return False
+
+        except Exception as e:
+            print(f"Error updating ticket {ticket_id} with resolution data: {e}")
+            return False
+
+    async def get_resolved_tickets(self, limit: int = 100) -> List[Dict]:
+        """
+        Retrieves tickets that have been resolved with RAG responses.
+
+        Args:
+            limit: Maximum number of tickets to retrieve
+
+        Returns:
+            List of resolved ticket documents
+        """
+        if self.collection is None:
+            print("Error: MongoDB connection not established. Call connect() first.")
+            return []
+
+        tickets = []
+        try:
+            cursor = self.collection.find(
+                {"processed": True, "resolution.status": "resolved"}
+            ).sort("resolution.generated_at", -1).limit(limit)
+
+            async for document in cursor:
+                document['_id'] = str(document['_id'])
+                tickets.append(document)
+        except Exception as e:
+            print(f"Error retrieving resolved tickets: {e}")
+
+        return tickets
+
+    async def get_routed_tickets(self, limit: int = 100) -> List[Dict]:
+        """
+        Retrieves tickets that have been routed to teams.
+
+        Args:
+            limit: Maximum number of tickets to retrieve
+
+        Returns:
+            List of routed ticket documents
+        """
+        if self.collection is None:
+            print("Error: MongoDB connection not established. Call connect() first.")
+            return []
+
+        tickets = []
+        try:
+            cursor = self.collection.find(
+                {"processed": True, "resolution.status": "routed"}
+            ).sort("resolution.generated_at", -1).limit(limit)
+
+            async for document in cursor:
+                document['_id'] = str(document['_id'])
+                tickets.append(document)
+        except Exception as e:
+            print(f"Error retrieving routed tickets: {e}")
+
+        return tickets
+
+    async def get_unprocessed_tickets_for_resolution(self, limit: int = 100) -> List[Dict]:
+        """
+        Retrieves processed tickets that haven't been resolved yet.
+
+        Args:
+            limit: Maximum number of tickets to retrieve
+
+        Returns:
+            List of processed tickets without resolution data
+        """
+        if self.collection is None:
+            print("Error: MongoDB connection not established. Call connect() first.")
+            return []
+
+        tickets = []
+        try:
+            # Find processed tickets that don't have resolution data
+            cursor = self.collection.find(
+                {"processed": True, "resolution": {"$exists": False}}
+            ).sort("created_at", -1).limit(limit)
+
+            async for document in cursor:
+                document['_id'] = str(document['_id'])
+                tickets.append(document)
+        except Exception as e:
+            print(f"Error retrieving unprocessed tickets for resolution: {e}")
 
         return tickets

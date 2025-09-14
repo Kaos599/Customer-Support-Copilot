@@ -75,7 +75,33 @@ The following technologies were used to build the application, as specified in t
 -   **Rationale**: This allowed for parallel development and rapid prototyping of the user interface. The UI components were built and tested independently, with a clear contract for how they would eventually connect to the backend logic.
 -   **Trade-off**: The UI provided a "mock" experience that was not fully representative of the final system's performance (e.g., response times).
 
-### g. Async/Await Compatibility Resolution ✅ RESOLVED
+### g. Advanced Ticket Management System
+-   **Decision**: Implemented a comprehensive ticket management system with clickable cards, detailed views, and AI-powered resolution.
+-   **Rationale**:
+    -   **User Experience**: Clickable tickets provide intuitive navigation and detailed information access
+    -   **AI Integration**: Automated resolution using RAG for eligible topics and team routing for others
+    -   **Scalability**: Multipage architecture allows for better organization and performance
+    -   **Transparency**: Detailed AI analysis display builds user trust and understanding
+-   **Implementation Details**:
+    -   **Multipage Navigation**: Streamlit pages for dashboard, tickets view, and ticket details
+    -   **Session State Management**: Proper state handling for navigation and data persistence
+    -   **Resolution Agent**: Specialized agent for ticket resolution with RAG and routing logic
+    -   **Database Schema Updates**: Extended unified schema to include resolution data
+-   **Trade-off**: Increased complexity in navigation management, but provides superior user experience and functionality.
+
+### h. Knowledge Base Integration and Citation Enhancement
+-   **Decision**: Integrated Atlan Documentation and Developer Hub with enhanced citation system.
+-   **Rationale**:
+    -   **Comprehensive Coverage**: Multiple knowledge sources provide complete information access
+    -   **Source Transparency**: Enhanced citations with snippets build user trust
+    -   **Performance**: Optimized vector search across multiple collections
+-   **Implementation Details**:
+    -   **Dual Knowledge Bases**: Atlan Docs and Developer Hub integration
+    -   **Semantic Chunking**: Intelligent document segmentation for better retrieval
+    -   **Citation Enhancement**: Numbered citations with source URLs and snippets
+-   **Trade-off**: Increased processing time for knowledge base preparation, but significantly improved response quality and user experience.
+
+### i. Async/Await Compatibility Resolution ✅ RESOLVED
 -   **Decision**: Fixed critical 'await outside async function' error in Streamlit dashboard
 -   **Rationale**:
     -   **Problem**: Streamlit runs in a synchronous execution context, but the application uses async database operations (MongoDB motor driver)

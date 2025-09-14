@@ -13,6 +13,77 @@ if project_root not in sys.path:
 from database.mongodb_client import MongoDBClient
 
 
+def resolve_all_unprocessed_tickets():
+    """
+    Resolve all unprocessed tickets using the resolution agent.
+    """
+    import asyncio
+    from agents.ticket_orchestrator import TicketOrchestrator
+
+    try:
+        # Get unprocessed tickets
+        tickets_data, _ = fetch_processed_tickets_from_db()
+        unprocessed_tickets = [t for t in tickets_data if not t.get('resolution')]
+
+        if not unprocessed_tickets:
+            st.success("✅ All tickets are already resolved!")
+            return
+
+        with st.spinner(f"🎯 Resolving {len(unprocessed_tickets)} tickets..."):
+            orchestrator = TicketOrchestrator()
+            resolved_count = 0
+            routed_count = 0
+            errors = []
+
+            for ticket in unprocessed_tickets:
+                try:
+                    async def resolve_single():
+                        try:
+                            result = await orchestrator.resolve_ticket(ticket)
+                            return result
+                        except Exception as e:
+                            return {"resolution": {"status": "error", "message": str(e)}}
+
+                    # Run async resolution
+                    try:
+                        loop = asyncio.get_running_loop()
+                    except RuntimeError:
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+
+                    result = loop.run_until_complete(resolve_single())
+
+                    resolution = result.get('resolution', {})
+                    status = resolution.get('status', 'unknown')
+
+                    if status == 'resolved':
+                        resolved_count += 1
+                    elif status == 'routed':
+                        routed_count += 1
+                    else:
+                        error_msg = resolution.get('message', 'Unknown error')
+                        errors.append(f"{ticket.get('id', 'Unknown')}: {error_msg}")
+
+                except Exception as e:
+                    errors.append(f"{ticket.get('id', 'Unknown')}: {str(e)}")
+
+            # Show results
+            st.success(f"✅ **Resolution Complete!**")
+            st.info(f"🤖 Resolved with AI: **{resolved_count}** tickets")
+            st.info(f"📋 Routed to teams: **{routed_count}** tickets")
+
+            if errors:
+                with st.expander(f"⚠️ {len(errors)} errors occurred"):
+                    for error in errors:
+                        st.write(f"• {error}")
+
+            st.info("🔄 Refreshing page to show updated information...")
+            st.rerun()
+
+    except Exception as e:
+        st.error(f"❌ Error resolving tickets: {str(e)}")
+
+
 def fetch_processed_tickets_from_db() -> tuple[List[Dict[str, Any]], datetime]:
     """
     Fetch processed tickets data from MongoDB.
@@ -61,9 +132,14 @@ def display_tickets_view():
     # Show data status
     st.caption(f"📊 Data last updated: {fetch_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-    # Add refresh button
-    if st.button("🔄 Refresh Data", key="refresh_tickets"):
-        st.rerun()
+    # Action buttons
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        if st.button("🔄 Refresh Data", key="refresh_tickets", use_container_width=True):
+            st.rerun()
+    with col2:
+        if st.button("🎯 Resolve All Unprocessed", key="resolve_all", type="primary", use_container_width=True):
+            resolve_all_unprocessed_tickets()
 
     # Filters section
     st.subheader("🔍 Filters")
@@ -222,66 +298,24 @@ def display_ticket_card(ticket: Dict[str, Any]):
 
         st.caption(f"Created: {formatted_date}")
 
-        # Expandable section for full details
-        with st.expander("View Details", expanded=False):
+        # Clickable button to view full details
+        if st.button("👁️ View Full Details", key=f"view_detail_{ticket_id}", use_container_width=True):
+            # Store ticket ID in session state for navigation
+            st.session_state.selected_ticket_id = ticket_id
+            # Navigate to ticket detail page
+            st.switch_page("pages/ticket_detail.py")
+
+        # Expandable section for quick preview (optional)
+        with st.expander("Quick Preview", expanded=False):
             st.markdown("**Full Subject:**")
             st.write(ticket.get('subject', 'N/A'))
 
-            st.markdown("**Body:**")
+            st.markdown("**Body Preview:**")
             body = ticket.get('body', 'N/A')
-            if len(body) > 500:
-                st.write(body[:500] + "...")
+            if len(body) > 200:
+                st.write(body[:200] + "...")
             else:
                 st.write(body)
-
-            # Processing metadata
-            processing_meta = ticket.get('processing_metadata', {})
-            if processing_meta:
-                st.markdown("**Processing Info:**")
-                st.write(f"- Model: {processing_meta.get('model_version', 'N/A')}")
-
-                # Confidence scores - convert to float if string
-                confidence_scores = ticket.get('confidence_scores', {})
-                topic_conf = confidence_scores.get('topic', 'N/A')
-                sentiment_conf = confidence_scores.get('sentiment', 'N/A')
-                priority_conf = confidence_scores.get('priority', 'N/A')
-
-                # Convert to float if string
-                try:
-                    if isinstance(topic_conf, str) and topic_conf != 'N/A':
-                        topic_conf = float(topic_conf)
-                    if isinstance(sentiment_conf, str) and sentiment_conf != 'N/A':
-                        sentiment_conf = float(sentiment_conf)
-                    if isinstance(priority_conf, str) and priority_conf != 'N/A':
-                        priority_conf = float(priority_conf)
-                except (ValueError, TypeError):
-                    pass  # Keep as is if conversion fails
-
-                # Format confidence scores
-                if isinstance(topic_conf, (int, float)):
-                    st.write(f"- Confidence - Topic: {topic_conf:.2f}")
-                else:
-                    st.write(f"- Confidence - Topic: {topic_conf}")
-
-                if isinstance(sentiment_conf, (int, float)):
-                    st.write(f"- Confidence - Sentiment: {sentiment_conf:.2f}")
-                else:
-                    st.write(f"- Confidence - Sentiment: {sentiment_conf}")
-
-                if isinstance(priority_conf, (int, float)):
-                    st.write(f"- Confidence - Priority: {priority_conf:.2f}")
-                else:
-                    st.write(f"- Confidence - Priority: {priority_conf}")
-
-                # Handle datetime object properly
-                processed_at = processing_meta.get('processed_at', 'N/A')
-                if isinstance(processed_at, datetime):
-                    processed_str = processed_at.strftime('%Y-%m-%d %H:%M:%S')
-                    st.write(f"- Processed: {processed_str}")
-                else:
-                    # Handle string format or fallback
-                    processed_str = str(processed_at)[:19] if processed_at != 'N/A' else 'N/A'
-                    st.write(f"- Processed: {processed_str}")
 
 
 def get_status_color(priority: str) -> str:
