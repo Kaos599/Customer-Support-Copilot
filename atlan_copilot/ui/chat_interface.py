@@ -11,7 +11,6 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from agents.orchestrator import Orchestrator
-from utils.langextract_citation_handler import LangExtractCitationHandler
 
 def display_chat_interface():
     """
@@ -219,7 +218,7 @@ async def process_query_async(query: str) -> Dict[str, Any]:
         enhanced_result = result.copy()
 
         # Citations are now provided by the RAG agent with detailed metadata
-        # No need to extract from context - they come structured from LangExtract
+        # Citations are generated directly from retrieved search results
 
         return {
             "success": True,

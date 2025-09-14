@@ -1,7 +1,6 @@
 import os
 import sys
 from typing import Dict, Any, List
-import textwrap
 
 # Add the project root to the Python path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -11,103 +10,138 @@ if project_root not in sys.path:
 from agents.base_agent import BaseAgent
 from embeddings.gemini_embedder import GeminiEmbedder
 from embeddings.similarity_search import SimilaritySearch
-from utils.langextract_citation_handler import LangExtractCitationHandler
-
-try:
-    import langextract as lx
-except ImportError:
-    print("Warning: langextract not installed. Structured extraction will be disabled.")
-    lx = None
 
 class RAGAgent(BaseAgent):
     """
-    Retrieval-Augmented Generation Agent with Structured Extraction.
+    Retrieval-Augmented Generation Agent.
     This agent takes a user query, retrieves relevant context from the vector store,
-    uses LangExtract to structure the information with grounded sources,
     and adds it to the state for the next agent to use.
     """
     def __init__(self):
         super().__init__()
         self.embedder = GeminiEmbedder(model_name="models/text-embedding-004")
         self.search_client = SimilaritySearch()
-        self.citation_handler = LangExtractCitationHandler(os.getenv("GOOGLE_API_KEY", ""))
 
-        # LangExtract configuration
-        self.extraction_prompt = textwrap.dedent("""\
-            Extract key information from Atlan documentation and support content.
-            Focus on:
-            - Technical concepts, features, and capabilities
-            - Configuration steps and setup instructions
-            - Troubleshooting information and solutions
-            - API endpoints, parameters, and usage examples
-            - Integration details and requirements
-            - Important URLs and documentation links
-            - Version-specific information and limitations
+    def _create_citations_from_search_results(self, search_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Create citations directly from search results.
+        Citations reference the actual retrieved content that supports the response.
 
-            Extract entities with their exact text and provide meaningful context.
-            Ensure all extractions are grounded to their source locations.
-        """)
+        Args:
+            search_results: List of search result dictionaries
 
-        # Define examples for the extraction task
-        self.extraction_examples = [
-            lx.data.ExampleData(
-                text="Atlan integrates with AWS Lambda to automate workflows and extend Atlan's capabilities. Configure integrations through the Atlan UI under Settings > Integrations.",
-                extractions=[
-                    lx.data.Extraction(
-                        extraction_class="feature",
-                        extraction_text="AWS Lambda integration",
-                        attributes={
-                            "purpose": "automate workflows",
-                            "configuration_location": "Settings > Integrations"
-                        }
-                    ),
-                    lx.data.Extraction(
-                        extraction_class="integration",
-                        extraction_text="AWS Lambda",
-                        attributes={
-                            "type": "automation tool",
-                            "benefit": "extend Atlan's capabilities"
-                        }
-                    )
-                ]
-            ) if lx else None,
-            lx.data.ExampleData(
-                text="To set up data lineage tracking, navigate to Assets > Lineage tab and enable the lineage feature. This requires admin permissions.",
-                extractions=[
-                    lx.data.Extraction(
-                        extraction_class="feature",
-                        extraction_text="data lineage tracking",
-                        attributes={
-                            "location": "Assets > Lineage tab",
-                            "requirement": "admin permissions"
-                        }
-                    ),
-                    lx.data.Extraction(
-                        extraction_class="action",
-                        extraction_text="enable the lineage feature",
-                        attributes={
-                            "prerequisite": "navigate to Assets > Lineage tab"
-                        }
-                    )
-                ]
-            ) if lx else None
-        ]
+        Returns:
+            List of citation dictionaries with actual content references
+        """
+        citations = []
+        for i, result in enumerate(search_results, 1):
+            # Filter out localhost URLs
+            url = result.get('url', '')
+            if url and url.startswith(('http://localhost', 'http://127.0.0.1')):
+                url = ''
 
-        # Filter out None examples if lx is not available
-        self.extraction_examples = [ex for ex in self.extraction_examples if ex is not None]
+            citation = {
+                'id': str(i),
+                'title': result.get('title', f'Source {i}'),
+                'url': url,
+                'source': result.get('source', 'Atlan Documentation'),
+                'content_snippet': result.get('content', '')[:200] + '...' if result.get('content') and len(result.get('content', '')) > 200 else result.get('content', ''),
+                'relevance_score': result.get('score', 0.8),  # Use actual similarity score
+                'confidence_score': 0.75  # Default confidence score
+            }
+            citations.append(citation)
 
-    def _is_langextract_available(self) -> bool:
-        """Check if LangExtract is available and properly configured."""
-        if lx is None:
-            return False
+        return citations
 
-        # Check if GOOGLE_API_KEY is set
-        api_key = os.getenv("GOOGLE_API_KEY")
-        if not api_key:
-            print("Warning: GOOGLE_API_KEY not set for LangExtract")
-            return False
+    def _format_context(self, search_results: List[Dict]) -> str:
+        """
+        Formats the list of search result documents into a single string.
+        This string will be passed to the response generation model.
+        """
+        if not search_results:
+            return "No relevant documents were found in the knowledge base."
 
-        return True
+        context_str = "Here is some context I found that might be relevant to your question:\n\n"
+        for i, doc in enumerate(search_results, 1):
+            context_str += f"--- Context Snippet {i} ---\n"
+            context_str += f"Source: {doc.get('source', 'N/A')}\n"
+            context_str += f"URL: {doc.get('url', 'N/A')}\n"
+            context_str += f"Title: {doc.get('title', 'N/A')}\n"
+            content_snippet = doc.get('content', '')
+            context_str += f"Content: {content_snippet}\n\n"
+
+        return context_str
+
+    def _format_context_with_citations(self, search_results: List[Dict]) -> str:
+        """
+        Formats the search results with numbered citations that will be used by the response generation.
+        This ensures citations reference actual retrieved content.
+
+        Args:
+            search_results: List of search result dictionaries
+
+        Returns:
+            Formatted context string with numbered citation markers
+        """
+        if not search_results:
+            return "No relevant documents were found in the knowledge base."
+
+        context_str = "Here is some context I found that might be relevant to your question:\n\n"
+        for i, doc in enumerate(search_results, 1):
+            context_str += f"--- Context Snippet [{i}] ---\n"
+            context_str += f"Source: {doc.get('source', 'N/A')}\n"
+            context_str += f"URL: {doc.get('url', 'N/A')}\n"
+            context_str += f"Title: {doc.get('title', 'N/A')}\n"
+            content_snippet = doc.get('content', '')
+            context_str += f"Content: {content_snippet}\n\n"
+
+        return context_str
+
+    async def execute(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Executes the RAG pipeline: embed query, search, format context, update state.
+        Uses standard retrieval with proper citations of actual retrieved content.
+        """
+        print("--- Executing RAG Agent ---")
+        query = state.get("query")
+        if not query:
+            print("Error: No query found in state for RAG agent.")
+            return {**state, "context": "Error: No query was provided to the RAG agent."}
+
+        # 1. Embed the user's query
+        query_embedding = self.embedder.embed_documents([query])
+        if not query_embedding:
+            print("Error: Could not generate embedding for the query.")
+            return {**state, "context": "Error: The query could not be processed into an embedding."}
+
+        # 2. Search vector store collections
+        qdrant_host = os.getenv("QDRANT_HOST")
+        if not qdrant_host or "your-qdrant-cluster-url" in qdrant_host:
+            print("Warning: QDRANT_HOST not set. RAG search is disabled.")
+            context = "Placeholder: RAG search is disabled because the vector database (QDRANT_HOST) is not configured."
+            citations = []
+        else:
+            print(f"Searching vector stores for query: '{query[:50]}...'")
+            # Search both documentation collections and combine the results
+            docs_results = await self.search_client.search("atlan_docs", query_embedding[0], limit=3)
+            dev_results = await self.search_client.search("atlan_developer", query_embedding[0], limit=2)
+
+            all_results = docs_results + dev_results
+
+            # Format context with numbered citations for the response generation
+            context = self._format_context_with_citations(all_results)
+
+            # Create citations from actual search results
+            citations = self._create_citations_from_search_results(all_results)
+
+        print(f"Retrieved context: {context[:400]}...")
+        print(f"Created {len(citations)} citations from actual retrieved content")
+
+        # Update the state with context and citations
+        updated_state = state.copy()
+        updated_state["context"] = context
+        updated_state["citations"] = citations
+        return updated_state
 
     def _extract_structured_info(self, raw_context: str) -> Dict[str, Any]:
         """
@@ -134,7 +168,7 @@ class RAGAgent(BaseAgent):
                 text_or_documents=raw_context,
                 prompt_description=self.extraction_prompt,
                 examples=self.extraction_examples[:1],  # Use only first example for speed
-                model_id="gemini-1.5-flash",  # Use faster model
+                model_id="gemini-2.5-flash",  # Use faster model
                 api_key=os.getenv("GOOGLE_API_KEY"),
                 extraction_passes=1,  # Single pass for speed
                 max_workers=1,  # Single worker
@@ -347,22 +381,11 @@ class RAGAgent(BaseAgent):
             # 5. Format the structured context with citations
             structured_context = self._format_structured_context_with_citations(raw_context, extraction_result, citations)
 
-        print(f"Retrieved context: {structured_context[:400]}...")
-        if extraction_result.get("success"):
-            print(f"Successfully extracted {extraction_result.get('extraction_count', 0)} structured entities")
-        print(f"Created {len(citations)} citations")
+        print(f"Retrieved context: {context[:400]}...")
+        print(f"Created {len(citations)} citations from actual retrieved content")
 
-        # Note: Don't close the search client connection here to avoid premature closing
-        # The connection will be managed by the Qdrant client's singleton pattern
-
-        # 7. Update the state with the structured cited context and metadata
+        # Update the state with context and citations
         updated_state = state.copy()
-        updated_state["context"] = structured_context
+        updated_state["context"] = context
         updated_state["citations"] = citations
-        updated_state["extraction_metadata"] = {
-            "extraction_count": extraction_result.get("extraction_count", 0),
-            "success": extraction_result.get("success", False),
-            "error": extraction_result.get("error"),
-            "citation_count": len(citations)
-        }
         return updated_state

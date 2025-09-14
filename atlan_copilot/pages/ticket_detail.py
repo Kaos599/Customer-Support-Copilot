@@ -484,33 +484,49 @@ def display_response_and_resolution(ticket: Dict[str, Any]):
             </div>
             """, unsafe_allow_html=True)
 
-            # Display sources and citations
+            # Display sources and citations as dropdown
             sources = resolution_data.get('sources', [])
             if sources:
                 st.markdown("### 📚 Sources & Citations")
-                st.info(f"📖 This response was generated using {len(sources)} knowledge base sources:")
 
+                # Create dropdown for sources
+                source_options = []
                 for i, source in enumerate(sources, 1):
+                    url = source.get('url', 'N/A')
+                    # Clean up URL for display
+                    if 'docs.atlan.com' in url:
+                        display_url = "📚 Atlan Documentation"
+                    elif 'developer.atlan.com' in url:
+                        display_url = "🛠️ Developer Hub"
+                    else:
+                        display_url = url.replace('https://', '').replace('http://', '')
+
+                    source_options.append(f"[{i}] {display_url}")
+
+                selected_source = st.selectbox(
+                    "Select a source to view details:",
+                    source_options,
+                    key=f"source_dropdown_{ticket_id}",
+                    help="Choose a source to see the URL and snippet"
+                )
+
+                # Show selected source details
+                if selected_source:
+                    selected_index = source_options.index(selected_source)
+                    source = sources[selected_index]
+
                     col1, col2 = st.columns([3, 1])
 
                     with col1:
                         url = source.get('url', 'N/A')
-                        # Clean up URL for display
-                        if 'docs.atlan.com' in url:
-                            display_url = "📚 Atlan Documentation"
-                        elif 'developer.atlan.com' in url:
-                            display_url = "🛠️ Developer Hub"
-                        else:
-                            display_url = url.replace('https://', '').replace('http://', '')
-
-                        st.markdown(f"**[{i}]** [{display_url}]({url})")
+                        st.markdown(f"**URL:** [{url}]({url})")
 
                     with col2:
-                        if st.button(f"View Snippet {i}", key=f"snippet_{i}", help="Show source text"):
-                            st.session_state[f"show_snippet_{i}"] = not st.session_state.get(f"show_snippet_{i}", False)
+                        if st.button("📖 View Snippet", key=f"snippet_{ticket_id}_{selected_index}", help="Show source text"):
+                            st.session_state[f"show_snippet_{ticket_id}_{selected_index}"] = not st.session_state.get(f"show_snippet_{ticket_id}_{selected_index}", False)
 
                     # Show snippet if requested
-                    if st.session_state.get(f"show_snippet_{i}", False) and source.get('snippet'):
+                    if st.session_state.get(f"show_snippet_{ticket_id}_{selected_index}", False) and source.get('snippet'):
                         st.markdown("""
                         <div style="
                             background-color: #e9ecef;
