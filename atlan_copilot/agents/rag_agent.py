@@ -26,6 +26,7 @@ class RAGAgent(BaseAgent):
         """
         Create citations directly from search results.
         Citations reference the actual retrieved content that supports the response.
+        NO TRUNCATION - Full content is preserved for complete transparency.
 
         Args:
             search_results: List of search result dictionaries
@@ -40,12 +41,15 @@ class RAGAgent(BaseAgent):
             if url and url.startswith(('http://localhost', 'http://127.0.0.1')):
                 url = ''
 
+            # Get FULL content - NO TRUNCATION at all
+            full_content = result.get('content', '')
+
             citation = {
                 'id': str(i),
                 'title': result.get('title', f'Source {i}'),
                 'url': url,
                 'source': result.get('source', 'Atlan Documentation'),
-                'content_snippet': result.get('content', ''),
+                'content_snippet': full_content,  # FULL CONTENT - No truncation
                 'relevance_score': result.get('score', 0.8),  # Use actual similarity score
                 'confidence_score': 0.75  # Default confidence score
             }
@@ -168,36 +172,13 @@ class RAGAgent(BaseAgent):
         }
 
 
-    def _create_citations_from_search_results(self, search_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _create_citations_from_search_results_duplicate(self, search_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        Create citations directly from search results for faster processing.
-        This avoids the slow LangExtract citation processing.
-
-        Args:
-            search_results: List of search result dictionaries
-
-        Returns:
-            List of citation dictionaries
+        LEGACY METHOD - This is a duplicate that should be removed.
+        Use the main _create_citations_from_search_results method instead.
         """
-        citations = []
-        for i, result in enumerate(search_results, 1):
-            # Filter out localhost URLs
-            url = result.get('url', '')
-            if url and url.startswith(('http://localhost', 'http://127.0.0.1')):
-                url = ''
-
-            citation = {
-                'id': str(i),
-                'title': result.get('title', f'Source {i}'),
-                'url': url,
-                'source': result.get('source', 'Atlan Documentation'),
-                'content_snippet': result.get('content', ''),
-                'relevance_score': 0.8,  # Default relevance score
-                'confidence_score': 0.75  # Default confidence score
-            }
-            citations.append(citation)
-
-        return citations
+        # This method is kept for backward compatibility but should be removed
+        return self._create_citations_from_search_results(search_results)
 
 
     def _format_context(self, search_results: List[Dict]) -> str:

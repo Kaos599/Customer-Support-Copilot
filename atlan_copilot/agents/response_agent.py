@@ -1,7 +1,8 @@
 import os
 import sys
 from typing import Dict, Any
-import google.generativeai as genai
+import google.genai as genai
+
 
 # Add the project root to the Python path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))

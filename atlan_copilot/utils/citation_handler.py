@@ -77,7 +77,7 @@ class CitationHandler:
                     title=source_info.get("title", "Unknown Title"),
                     url=source_info.get("url", ""),
                     source=source_info.get("source", "Atlan Documentation"),
-                    content_snippet=source_info.get("content", "").strip()[:300] + "..." if len(source_info.get("content", "")) > 300 else source_info.get("content", "").strip(),
+                    content_snippet=source_info.get("content", "").strip(),  # FULL CONTENT - No truncation
                     relevance_score=None  # Could be added later
                 )
                 sources.append(source)

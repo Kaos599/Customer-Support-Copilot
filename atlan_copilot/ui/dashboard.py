@@ -601,7 +601,7 @@ def process_tickets_batch(mode: str, batch_size: int = None, priority_filter: Li
 
     # Clear analytics cache and trigger dashboard refresh
     if not df.empty:
-        display_overall_analytics.clear()
+        display_overall_analytics_data.clear()
         st.rerun()
 
     return df
@@ -710,7 +710,7 @@ def add_tickets_from_file():
                 if inserted_ids:
                     st.success(f"✅ Successfully added {len(inserted_ids)} tickets to the database!")
                     # Clear analytics cache and refresh the page
-                    display_overall_analytics.clear()
+                    display_overall_analytics_data.clear()
                     st.rerun()
                 else:
                     st.error("❌ Failed to add tickets to database. Check logs for details.")
@@ -978,7 +978,7 @@ def process_tickets_with_loaded_data_parallel(tickets_data: List[Dict], progress
 
     # Clear analytics cache and trigger dashboard refresh
     if result and result.get("processed", 0) > 0:
-        display_overall_analytics.clear()
+        display_overall_analytics_data.clear()
         st.rerun()
 
     return result
@@ -1064,7 +1064,7 @@ def resolve_tickets_with_loaded_data_parallel(tickets_data: List[Dict], progress
 
     # Clear analytics cache and trigger dashboard refresh
     if result and (result.get("resolved", 0) > 0 or result.get("routed", 0) > 0):
-        display_overall_analytics.clear()
+        display_overall_analytics_data.clear()
         st.rerun()
 
     return result
@@ -1141,6 +1141,23 @@ def fetch_new_tickets():
             if new_tickets:
                 st.success(f"✅ Found {len(new_tickets)} new tickets!")
 
+                # Update session state with newly fetched tickets
+                current_tickets = st.session_state.get("ticket_data", [])
+                updated_tickets = current_tickets + new_tickets
+
+                # Remove duplicates based on ticket ID
+                seen_ids = set()
+                unique_tickets = []
+                for ticket in updated_tickets:
+                    ticket_id = ticket.get("id")
+                    if ticket_id and ticket_id not in seen_ids:
+                        seen_ids.add(ticket_id)
+                        unique_tickets.append(ticket)
+
+                # Update session state with deduplicated tickets
+                st.session_state.ticket_data = unique_tickets
+                st.session_state.data_cached_at = datetime.now()
+
                 # Display fetched tickets
                 with st.expander(f"📋 Fetched Tickets ({len(new_tickets)})", expanded=True):
                     # Convert to DataFrame for display
@@ -1167,7 +1184,7 @@ def fetch_new_tickets():
                         st.metric("Already Processed", processed_count)
 
                 # Clear analytics cache and trigger dashboard refresh
-                display_overall_analytics.clear()
+                display_overall_analytics_data.clear()
                 st.rerun()
             else:
                 st.info("ℹ️ No new tickets found in the selected time range.")
@@ -1210,6 +1227,23 @@ def fetch_new_tickets():
                 if custom_tickets:
                     st.success(f"✅ Found {len(custom_tickets)} tickets in date range!")
 
+                    # Update session state with custom fetched tickets
+                    current_tickets = st.session_state.get("ticket_data", [])
+                    updated_tickets = current_tickets + custom_tickets
+
+                    # Remove duplicates based on ticket ID
+                    seen_ids = set()
+                    unique_tickets = []
+                    for ticket in updated_tickets:
+                        ticket_id = ticket.get("id")
+                        if ticket_id and ticket_id not in seen_ids:
+                            seen_ids.add(ticket_id)
+                            unique_tickets.append(ticket)
+
+                    # Update session state with deduplicated tickets
+                    st.session_state.ticket_data = unique_tickets
+                    st.session_state.data_cached_at = datetime.now()
+
                     # Display summary
                     processed_in_range = sum(1 for t in custom_tickets if t.get("processed", False))
                     unprocessed_in_range = len(custom_tickets) - processed_in_range
@@ -1219,6 +1253,10 @@ def fetch_new_tickets():
                         st.metric("Processed in Range", processed_in_range)
                     with col2:
                         st.metric("Unprocessed in Range", unprocessed_in_range)
+
+                    # Clear analytics cache and trigger dashboard refresh
+                    display_overall_analytics_data.clear()
+                    st.rerun()
                 else:
                     st.info("ℹ️ No tickets found in the specified date range.")
 
@@ -1239,12 +1277,35 @@ def display_dashboard():
 
     with col1:
         if st.button("➕ Add Tickets", type="secondary", use_container_width=True):
+            st.session_state.show_add_tickets = True
+
+    # Handle the Add Tickets functionality
+    if st.session_state.get("show_add_tickets", False):
+        with st.expander("📁 Add Tickets from File", expanded=True):
+            # Close button
+            col1, col2 = st.columns([6, 1])
+            with col2:
+                if st.button("❌ Close", key="close_add_tickets"):
+                    st.session_state.show_add_tickets = False
+                    st.rerun()
+
             add_tickets_from_file()
 
     with col2:
         if st.button("🔄 Fetch New Tickets", type="secondary", use_container_width=True):
+            st.session_state.show_fetch_tickets = True
+
+    # Handle the Fetch New Tickets functionality
+    if st.session_state.get("show_fetch_tickets", False):
+        with st.expander("🔍 Fetch New Tickets", expanded=True):
+            # Close button
+            col1, col2 = st.columns([6, 1])
+            with col2:
+                if st.button("❌ Close", key="close_fetch_tickets"):
+                    st.session_state.show_fetch_tickets = False
+                    st.rerun()
+
             fetch_new_tickets()
-            st.rerun()
 
     with col3:
         if st.button("⚡ Process Tickets", type="primary", use_container_width=True):

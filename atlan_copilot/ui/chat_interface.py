@@ -95,9 +95,7 @@ def display_chat_interface():
                             # Show content snippet
                             content = citation.get('content_snippet', '').strip()
                             if content:
-                                # Limit snippet length for better UX
-                                if len(content) > 150:
-                                    content = content[:150] + "..."
+                                # FULL CONTENT - No truncation for complete transparency
                                 st.markdown(f"💬 {content}")
 
                             st.divider()
@@ -181,8 +179,7 @@ def display_chat_interface():
                                     st.markdown(f"🔗 [{url}]({url})")
                                 content = citation.get('content_snippet', '').strip()
                                 if content:
-                                    if len(content) > 150:
-                                        content = content[:150] + "..."
+                                    # FULL CONTENT - No truncation for complete transparency
                                     st.markdown(f"💬 {content}")
                                 st.divider()
 

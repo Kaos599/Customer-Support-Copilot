@@ -2,7 +2,8 @@ import os
 import time
 import asyncio
 from typing import List, Optional
-import google.generativeai as genai
+import google.genai as genai
+
 from google.genai import errors as genai_errors
 
 class GeminiEmbedder:

@@ -1,6 +1,7 @@
 import os
 import json
-import google.generativeai as genai
+import google.genai as genai
+
 from typing import Dict, Any, List
 
 # Add the project root to the Python path to allow for absolute imports
