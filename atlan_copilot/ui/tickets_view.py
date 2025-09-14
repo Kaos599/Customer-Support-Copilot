@@ -273,7 +273,15 @@ def display_ticket_card(ticket: Dict[str, Any]):
                 else:
                     st.write(f"- Confidence - Priority: {priority_conf}")
 
-                st.write(f"- Processed: {processing_meta.get('processed_at', 'N/A')[:19]}")
+                # Handle datetime object properly
+                processed_at = processing_meta.get('processed_at', 'N/A')
+                if isinstance(processed_at, datetime):
+                    processed_str = processed_at.strftime('%Y-%m-%d %H:%M:%S')
+                    st.write(f"- Processed: {processed_str}")
+                else:
+                    # Handle string format or fallback
+                    processed_str = str(processed_at)[:19] if processed_at != 'N/A' else 'N/A'
+                    st.write(f"- Processed: {processed_str}")
 
 
 def get_status_color(priority: str) -> str:
