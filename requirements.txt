@@ -3,7 +3,7 @@ langchain==0.3.27
 langextract==1.0.9
 langgraph==0.6.7
 motor==3.7.1
-nest-asyncio==1.6.0
+nest-asyncio
 numpy==2.3.3
 pandas==2.3.2
 protobuf==6.32.1
