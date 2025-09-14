@@ -82,7 +82,7 @@ class TestUnifiedSchema:
         assert update_query["$set"]["confidence_scores"] == classification_result["confidence_scores"]
         assert "processing_metadata" in update_query["$set"]
         assert update_query["$set"]["processing_metadata"]["processed_at"]
-        assert update_query["$set"]["processing_metadata"]["model_version"] == "gemini-1.5-flash"
+        assert update_query["$set"]["processing_metadata"]["model_version"] == "gemini-2.5-flash"
         assert update_query["$set"]["processing_metadata"]["processing_time_ms"] == 1500
 
         assert result == True

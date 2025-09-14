@@ -65,9 +65,10 @@ class MongoDBClient:
             print("Error: MongoDB connection not established. Call connect() first.")
             return None
         try:
-            # Add processed field to each ticket
+            # Add required fields to each ticket
             for ticket in tickets_data:
                 ticket.setdefault('processed', False)
+                ticket.setdefault('status', 'unprocessed')
                 ticket.setdefault('created_at', datetime.utcnow())
                 ticket.setdefault('updated_at', datetime.utcnow())
 
@@ -118,11 +119,12 @@ class MongoDBClient:
             # Prepare update data
             update_data = {
                 "processed": True,
+                "status": "processed",  # Set status to processed when classification is done
                 "classification": classification_result.get("classification", {}),
                 "confidence_scores": classification_result.get("confidence_scores", {}),
                 "processing_metadata": {
                     "processed_at": datetime.utcnow(),
-                    "model_version": "gemini-1.5-flash",
+                    "model_version": "gemini-2.5-flash",
                     "processing_time_ms": classification_result.get("processing_time_ms", 0),
                     "agent_version": "1.0"
                 },
@@ -240,34 +242,37 @@ class MongoDBClient:
             # Get total tickets count
             total_tickets = await self.collection.count_documents({})
 
-            # Get processed tickets count
-            total_processed = await self.collection.count_documents({"processed": True})
+            # Get status-based counts with correct logic
+            # A ticket is unprocessed if status is "unprocessed"
+            total_unprocessed = await self.collection.count_documents({"status": "unprocessed"})
 
-            # Get unprocessed tickets count
-            total_unprocessed = await self.collection.count_documents({"processed": False})
+            # A ticket is processed if processed=true AND status="processed"
+            total_processed = await self.collection.count_documents({
+                "processed": True,
+                "status": "processed"
+            })
 
-            # Get processed today count
+            # A ticket is resolved if processed=true AND status="resolved"
+            total_resolved = await self.collection.count_documents({
+                "processed": True,
+                "status": "resolved"
+            })
+
+            # Get processed today count (using processing_metadata.processed_at for backward compatibility)
             today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
             processed_today = await self.collection.count_documents({
-                "processed": True,
                 "processing_metadata.processed_at": {"$gte": today}
             })
 
-            # Get resolved tickets count
-            total_resolved = await self.collection.count_documents({
-                "processed": True,
-                "resolution.status": "resolved"
-            })
-
-            # Get routed tickets count
-            total_routed = await self.collection.count_documents({
+            # Get routed count (processed=true AND resolution.status="routed")
+            routed_count = await self.collection.count_documents({
                 "processed": True,
                 "resolution.status": "routed"
             })
 
             # Get priority distribution for processed tickets
             pipeline = [
-                {"$match": {"processed": True}},
+                {"$match": {"$or": [{"status": {"$in": ["processed", "resolved"]}}, {"processed": True}]}},
                 {"$group": {"_id": "$classification.priority", "count": {"$sum": 1}}},
                 {"$sort": {"count": -1}}
             ]
@@ -279,9 +284,9 @@ class MongoDBClient:
                 "total_tickets": total_tickets,
                 "total_processed": total_processed,
                 "total_unprocessed": total_unprocessed,
-                "processed_today": processed_today,
                 "total_resolved": total_resolved,
-                "total_routed": total_routed,
+                "total_routed": routed_count,
+                "processed_today": processed_today,
                 "priority_distribution": priority_stats
             }
         except Exception as e:
@@ -470,11 +475,13 @@ class MongoDBClient:
                 resolution_data['generated_at'] = datetime.now()
 
             # Update the ticket with resolution data
+            status_update = "resolved" if resolution_data.get('status') == 'resolved' else "processed"
             update_result = await self.collection.update_one(
-                {"id": ticket_id, "processed": True},
+                {"id": ticket_id},
                 {
                     "$set": {
                         "resolution": resolution_data,
+                        "status": status_update,
                         "updated_at": datetime.now()
                     }
                 }

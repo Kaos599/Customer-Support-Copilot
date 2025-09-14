@@ -174,18 +174,21 @@ def display_statistics():
     stats = loop.run_until_complete(get_stats())
 
     if stats:
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3, col4, col5 = st.columns(5)
 
         with col1:
             st.metric("Total Tickets", stats.get("total_tickets", 0))
 
         with col2:
-            st.metric("Processed", stats.get("total_processed", 0))
-
-        with col3:
             st.metric("Unprocessed", stats.get("total_unprocessed", 0))
 
+        with col3:
+            st.metric("Processed", stats.get("total_processed", 0))
+
         with col4:
+            st.metric("Resolved", stats.get("total_resolved", 0))
+
+        with col5:
             st.metric("Processed Today", stats.get("processed_today", 0))
     else:
         st.warning("Could not retrieve statistics. Database connection may have issues.")
@@ -728,7 +731,7 @@ def resolve_processed_tickets():
     """
     Provides resolution options for processed tickets using RAG or routing.
     """
-    st.markdown("### 🎯 Resolve Processed Tickets")
+    st.markdown("### 🎯 Resolve All Unprocessed Tickets")
 
     # Import required modules
     import sys
@@ -778,29 +781,79 @@ def resolve_processed_tickets():
 
         # Resolve button
         if st.button("🎯 Start Resolution", type="primary"):
-            with st.spinner("Resolving tickets..."):
-                try:
-                    if resolution_mode == "Resolve by Count Limit":
-                        result = loop.run_until_complete(resolve_batch(resolve_batch_size))
-                    else:
-                        result = loop.run_until_complete(resolve_batch(50))  # Default batch size
+            # Create progress containers
+            progress_container = st.container()
+            status_container = st.container()
 
-                    if result["status"] == "success":
-                        st.success(f"✅ Resolution completed! "
-                                 f"Resolved: {result.get('resolved', 0)}, "
-                                 f"Routed: {result.get('routed', 0)}")
+            try:
+                # Determine batch size
+                if resolution_mode == "Resolve by Count Limit":
+                    batch_size = resolve_batch_size
+                else:
+                    batch_size = min(unresolved_count, 50)  # Default batch size or all unresolved
 
-                        if result.get("errors"):
-                            with st.expander("⚠️ Errors encountered"):
-                                for error in result["errors"][:5]:
-                                    st.write(f"• {error}")
-                                if len(result["errors"]) > 5:
-                                    st.write(f"... and {len(result['errors']) - 5} more errors")
-                    else:
-                        st.error(f"❌ Resolution failed: {result.get('message', 'Unknown error')}")
+                with progress_container:
+                    progress_bar = st.progress(0)
+                    progress_text = st.empty()
 
-                except Exception as e:
-                    st.error(f"❌ Resolution failed: {str(e)}")
+                with status_container:
+                    status_text = st.empty()
+
+                # Show initial status
+                progress_text.write(f"🎯 Preparing to resolve **{batch_size} tickets**...")
+                status_text.write("📊 Status: Initializing resolution process...")
+
+                # Call resolution with progress callback
+                async def resolve_with_progress(batch_size):
+                    try:
+                        # Import the resolution function
+                        from scripts.resolve_tickets import resolve_processed_tickets_with_progress
+
+                        # Use the progress-aware version
+                        result = await resolve_processed_tickets_with_progress(
+                            batch_size=batch_size,
+                            progress_callback=lambda current, total, message:
+                                update_progress(current, total, message)
+                        )
+                        return result
+                    except AttributeError:
+                        # Fall back to regular resolution if progress version doesn't exist
+                        progress_text.write("⚠️ Using standard resolution (progress indicators not available)")
+                        return await resolve_batch(batch_size)
+
+                def update_progress(current, total, message):
+                    """Update progress indicators"""
+                    if total > 0:
+                        progress = min(current / total, 1.0)
+                        progress_bar.progress(progress)
+                        progress_text.write(f"🎯 Resolving tickets: **{current}/{total}** completed")
+                        status_text.write(f"📊 {message}")
+
+                # Execute resolution
+                result = loop.run_until_complete(resolve_with_progress(batch_size))
+
+                # Final status update
+                progress_bar.progress(1.0)
+                progress_text.write(f"✅ Resolution completed! **{batch_size} tickets processed**")
+
+                if result["status"] == "success":
+                    resolved = result.get('resolved', 0)
+                    routed = result.get('routed', 0)
+                    status_text.write(f"📊 Final: **{resolved} resolved** with AI, **{routed} routed** to teams")
+
+                    if result.get("errors"):
+                        with st.expander("⚠️ Errors encountered"):
+                            for error in result["errors"][:5]:
+                                st.write(f"• {error}")
+                            if len(result["errors"]) > 5:
+                                st.write(f"... and {len(result['errors']) - 5} more errors")
+                else:
+                    status_text.write(f"❌ Resolution failed: {result.get('message', 'Unknown error')}")
+
+            except Exception as e:
+                progress_text.write("❌ Resolution failed")
+                status_text.write(f"❌ Error: {str(e)}")
+                st.error(f"❌ Resolution failed: {str(e)}")
 
     else:
         st.success("✅ All processed tickets have been resolved!")
@@ -1016,7 +1069,7 @@ def display_dashboard():
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        if st.button("🔄 Resolve Tickets", type="secondary", use_container_width=True):
+        if st.button("🔄 Resolve All", type="secondary", use_container_width=True):
             resolve_processed_tickets()
 
     with col2:

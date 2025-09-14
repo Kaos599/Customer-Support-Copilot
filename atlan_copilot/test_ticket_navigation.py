@@ -49,7 +49,7 @@ def test_ticket_detail_structure():
                 'priority': 0.78
             },
             'processing_metadata': {
-                'model_version': 'gemini-1.5-flash',
+                'model_version': 'gemini-2.5-flash',
                 'processing_time_seconds': 1.5,
                 'processed_at': '2025-09-14T10:30:00',
                 'status': 'completed'

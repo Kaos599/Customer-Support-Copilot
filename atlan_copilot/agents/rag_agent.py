@@ -134,7 +134,7 @@ class RAGAgent(BaseAgent):
                 text_or_documents=raw_context,
                 prompt_description=self.extraction_prompt,
                 examples=self.extraction_examples[:1],  # Use only first example for speed
-                model_id="gemini-1.5-flash",  # Use faster model
+                model_id="gemini-2.5-flash",  # Use faster model
                 api_key=os.getenv("GOOGLE_API_KEY"),
                 extraction_passes=1,  # Single pass for speed
                 max_workers=1,  # Single worker

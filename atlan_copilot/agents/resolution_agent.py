@@ -146,7 +146,7 @@ class ResolutionAgent(BaseAgent):
                 "confidence_scores": classification_result.get("confidence_scores", {}),
                 "processing_metadata": {
                     "processed_at": datetime.now(),
-                    "model_version": "gemini-1.5-flash",
+                    "model_version": "gemini-2.5-flash",
                     "processing_time_seconds": classification_result.get("processing_time", 0),
                     "agent_version": "2.0",
                     "status": "completed"

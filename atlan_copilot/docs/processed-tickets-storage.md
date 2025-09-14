@@ -56,7 +56,7 @@ The system uses a single MongoDB collection with embedded processing data:
   },
   "processing_metadata": {
     "processed_at": "2025-09-13T06:38:47.513000",
-    "model_version": "gemini-1.5-flash",
+    "model_version": "gemini-2.5-flash",
     "processing_time_ms": 1500,
     "agent_version": "1.0"
   },
